@@ -69,8 +69,15 @@ main.wrap { padding: 10px 12px; max-width: 680px; margin: 0 auto; }
 .field > label .req { color: var(--gold); margin-left: 3px; }
 .field input[type=text], .field input[type=url], .field input[type=date], .field input[type=search],
 .field select, .field textarea {
-  width: 100%; font-size: 16px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line);
+  width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; font-size: 16px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--panel2); color: var(--text); font-family: inherit; }
+/* iPadOS / iOS の WebKit は date 入力と select に固有の最小幅を持ち、グリッドの列からはみ出して隣と重なる。
+   -webkit-appearance を外し、列側も minmax(0, 1fr) で「縮んでよい」ことを明示する */
+.field input[type=date] { -webkit-appearance: none; appearance: none; min-height: 42px; display: block; }
+.field input[type=date]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
+.field select { -webkit-appearance: none; appearance: none; padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2394a3b8' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; }
 .field input::placeholder, .field textarea::placeholder { color: #64748b; }
 .field input[type=color] { width: 56px; height: 36px; padding: 2px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); }
 .field textarea { min-height: 64px; resize: vertical; }
@@ -80,7 +87,8 @@ main.wrap { padding: 10px 12px; max-width: 680px; margin: 0 auto; }
 .field.row { grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
 .field.row input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); }
 .field.row > label { font-size: 13px; color: var(--text); font-weight: 400; }
-.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 10px; }
+.cols > * { min-width: 0; }
 @media (max-width: 420px) { .cols { grid-template-columns: 1fr; } }
 
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
