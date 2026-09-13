@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>空港ウォッチ</title>
+<style>
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --panel2: #273449; --text: #e2e8f0; --muted: #94a3b8;
+    --accent: #38bdf8; --gold: #fbbf24; --green: #4ade80; --red: #f87171; --line: #334155;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 15px; }
+  body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  header { position: sticky; top: 0; z-index: 10; background: rgba(15,23,42,.96); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line); padding: calc(8px + env(safe-area-inset-top)) 12px 8px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  h1 { font-size: 17px; margin: 0; white-space: nowrap; }
+  select { flex: 1; min-width: 0; font-size: 16px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); appearance: none; -webkit-appearance: none; }
+  .status { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 5px; vertical-align: middle; }
+  .status .dot.err { background: var(--red); } .status .dot.busy { background: var(--gold); }
+  .bar { height: 3px; background: var(--line); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; transition: transform 1s linear; }
+  nav.tabs { display: flex; gap: 6px; padding: 10px 12px 0; }
+  nav.tabs button { flex: 1; padding: 9px 4px; font-size: 13px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+  nav.tabs button.on { background: var(--accent); color: #082f49; border-color: var(--accent); font-weight: 700; }
+  nav.tabs button b { font-weight: 700; }
+  main { padding: 10px 12px; }
+  section { display: none; } section.on { display: block; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; display: grid;
+    grid-template-columns: 1fr 112px; gap: 2px 10px; position: relative; }
+  .card > div { min-width: 0; }
+  .card.special { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset, 0 0 12px rgba(251,191,36,.25); background: linear-gradient(135deg, #2b2a1e 0%, var(--panel) 60%); }
+  .card .reg { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+  .card .type { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .card .airline { font-size: 13px; overflow-wrap: anywhere; }
+  .card .callsign { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--accent); }
+  .card .right { text-align: right; grid-row: 1 / span 3; align-self: start; }
+  .card .big { font-size: 18px; font-weight: 700; white-space: nowrap; }
+  .card .sub { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  /* 機体写真（Planespotters.net）。固定サイズのサムネイルをカード右側に置く */
+  .photo-wrap { width: 112px; height: 72px; margin-bottom: 4px; }
+  .photo { position: relative; display: block; width: 112px; height: 72px; border-radius: 8px; overflow: hidden;
+    background: #0b1220; border: 1px solid var(--line); text-decoration: none; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo .ph { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; color: #475569; }
+  .photo .cred { position: absolute; left: 0; right: 0; bottom: 0; font-size: 8px; line-height: 1.3; padding: 1px 3px; text-align: left;
+    background: rgba(0,0,0,.55); color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card.special .photo { border-color: var(--gold); }
+  .card .route { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+  .card .route b { color: var(--text); }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--panel2); color: var(--muted); margin-left: 6px; vertical-align: middle; }
+  .badge.gold { background: var(--gold); color: #3b2f00; font-weight: 700; }
+  .badge.green { background: #14532d; color: var(--green); } .badge.blue { background: #0c4a6e; color: var(--accent); }
+  .badge.guess { border: 1px dashed var(--muted); background: transparent; }
+  .special-note { grid-column: 1 / -1; font-size: 13px; margin-top: 4px; padding: 6px 8px; border-radius: 8px; background: rgba(251,191,36,.12); color: #fde68a; }
+  .special-note i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; border: 1px solid rgba(255,255,255,.4); }
+  h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 2px 6px; }
+  footer { font-size: 11px; color: var(--muted); padding: 16px 12px; text-align: center; line-height: 1.6; }
+  .err { background: #450a0a; color: #fecaca; padding: 10px 12px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 11px; color: var(--muted); padding: 0 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>✈ 空港ウォッチ</h1>
+    <select id="airport" aria-label="空港を選択"></select>
+  </div>
+  <div class="status">
+    <span><span class="dot" id="dot"></span><span id="statusText">読み込み中…</span></span>
+    <span id="countdown"></span>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="ground" class="on">空港にいる <b id="nGround">-</b></button>
+  <button data-tab="arriving">到着予定 <b id="nArr">-</b></button>
+  <button data-tab="departing">出発 <b id="nDep">-</b></button>
+</nav>
+
+<main>
+  <div id="error" class="err" hidden></div>
+  <section id="ground" class="on"></section>
+  <section id="arriving"></section>
+  <section id="departing"></section>
+  <div id="nearby"></div>
+</main>
+
+<footer>
+  30秒ごとに自動更新。位置データ: <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>（ADS-B）／経路: <a href="https://www.adsbdb.com" target="_blank" rel="noopener">adsbdb</a><br>
+  機体写真: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a>（写真をタップすると撮影者のページが開きます）<br>
+  受信状況により表示されない機体もあります。到着予定の「推定」は飛行経路からの推測です。
+</footer>
+
+<script>
+  var AIRPORTS = [{"icao":"RJTT","iata":"HND","name":"東京国際（羽田）"},{"icao":"RJAA","iata":"NRT","name":"成田国際"},{"icao":"RJBB","iata":"KIX","name":"関西国際"},{"icao":"RJOO","iata":"ITM","name":"大阪国際（伊丹）"},{"icao":"RJBE","iata":"UKB","name":"神戸"},{"icao":"RJGG","iata":"NGO","name":"中部国際（セントレア）"},{"icao":"RJNA","iata":"NKM","name":"名古屋（小牧）"},{"icao":"RJCC","iata":"CTS","name":"新千歳"},{"icao":"RJFF","iata":"FUK","name":"福岡"},{"icao":"ROAH","iata":"OKA","name":"那覇"},{"icao":"RJFK","iata":"KOJ","name":"鹿児島"},{"icao":"RJFT","iata":"KMJ","name":"熊本（阿蘇くまもと）"},{"icao":"RJFM","iata":"KMI","name":"宮崎"},{"icao":"RJFU","iata":"NGS","name":"長崎"},{"icao":"RJFO","iata":"OIT","name":"大分"},{"icao":"RJFR","iata":"KKJ","name":"北九州"},{"icao":"RJFS","iata":"HSG","name":"佐賀（九州佐賀国際）"},{"icao":"RJOA","iata":"HIJ","name":"広島"},{"icao":"RJOB","iata":"OKJ","name":"岡山（岡山桃太郎）"},{"icao":"RJOM","iata":"MYJ","name":"松山"},{"icao":"RJOT","iata":"TAK","name":"高松"},{"icao":"RJOK","iata":"KCZ","name":"高知（高知龍馬）"},{"icao":"RJOS","iata":"TKS","name":"徳島（徳島阿波おどり）"},{"icao":"RJOH","iata":"YGJ","name":"米子（米子鬼太郎）"},{"icao":"RJOI","iata":"IWK","name":"岩国（岩国錦帯橋）"},{"icao":"RJDC","iata":"UBJ","name":"山口宇部"},{"icao":"RJSS","iata":"SDJ","name":"仙台"},{"icao":"RJSN","iata":"KIJ","name":"新潟"},{"icao":"RJNK","iata":"KMQ","name":"小松"},{"icao":"RJNT","iata":"TOY","name":"富山（富山きときと）"},{"icao":"RJNS","iata":"FSZ","name":"静岡（富士山静岡）"},{"icao":"RJAH","iata":"IBR","name":"茨城"},{"icao":"RJSA","iata":"AOJ","name":"青森"},{"icao":"RJSK","iata":"AXT","name":"秋田"},{"icao":"RJSI","iata":"HNA","name":"花巻（いわて花巻）"},{"icao":"RJSC","iata":"GAJ","name":"山形"},{"icao":"RJSF","iata":"FKS","name":"福島"},{"icao":"RJCH","iata":"HKD","name":"函館"},{"icao":"RJEC","iata":"AKJ","name":"旭川"},{"icao":"RJCB","iata":"OBO","name":"帯広（とかち帯広）"},{"icao":"RJCK","iata":"KUH","name":"釧路（たんちょう釧路）"},{"icao":"RJCM","iata":"MMB","name":"女満別"},{"icao":"RJKA","iata":"ASJ","name":"奄美"},{"icao":"ROIG","iata":"ISG","name":"新石垣"},{"icao":"ROMY","iata":"MMY","name":"宮古"}];
+  var REFRESH_SEC = 30;
+  var currentIcao = null, timer = null, tick = null, remaining = REFRESH_SEC, busy = false, lastData = null;
+
+  var sel = document.getElementById('airport');
+  AIRPORTS.forEach(function (a) {
+    var o = document.createElement('option');
+    o.value = a.icao; o.textContent = a.name + '（' + a.iata + '）';
+    sel.appendChild(o);
+  });
+  var saved = null;
+  try { saved = localStorage.getItem('airport'); } catch (e) {}
+  var fromHash = (location.hash || '').replace('#', '').toUpperCase();
+  currentIcao = AIRPORTS.some(function (a) { return a.icao === fromHash; }) ? fromHash
+              : AIRPORTS.some(function (a) { return a.icao === saved; }) ? saved : AIRPORTS[0].icao;
+  sel.value = currentIcao;
+  sel.addEventListener('change', function () {
+    currentIcao = sel.value;
+    try { localStorage.setItem('airport', currentIcao); } catch (e) {}
+    location.hash = currentIcao;
+    clearAll(); refresh();
+  });
+
+  document.querySelectorAll('nav.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('nav.tabs button').forEach(function (x) { x.classList.remove('on'); });
+      document.querySelectorAll('main section').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      document.getElementById(b.dataset.tab).classList.add('on');
+      // 開いたタブの機体の写真を優先して取りに行くため描画し直す（サーバーへの再問い合わせはしない）
+      if (lastData) render(lastData);
+    });
+  });
+
+  function clearAll() {
+    ['ground', 'arriving', 'departing', 'nearby'].forEach(function (id) { document.getElementById(id).innerHTML = ''; });
+    ['nGround', 'nArr', 'nDep'].forEach(function (id) { document.getElementById(id).textContent = '-'; });
+  }
+
+  function setStatus(text, state) {
+    document.getElementById('statusText').textContent = text;
+    document.getElementById('dot').className = 'dot' + (state ? ' ' + state : '');
+  }
+
+  function refresh() {
+    if (busy) return;
+    busy = true;
+    setStatus('更新中…', 'busy');
+    var icao = currentIcao;
+    fetch('/api/status?icao=' + encodeURIComponent(icao), { cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function (resp) {
+        busy = false;
+        if (icao !== currentIcao) return; // 切替中に返ってきた古いレスポンスは捨てる
+        var data = resp.data;
+        if (!resp.ok || data.error) { showError(data.error || ('HTTP ' + resp.status)); setStatus('取得エラー', 'err'); scheduleNext(); return; }
+        hideError();
+        lastData = data;
+        render(data);
+        var t = new Date(data.updatedAt);
+        setStatus(data.airport.name + ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds()) + ' 更新（周辺 ' + data.total + ' 機）', '');
+        scheduleNext();
+      })
+      .catch(function (err) {
+        busy = false;
+        showError('サーバーとの通信に失敗しました: ' + (err && err.message ? err.message : err));
+        setStatus('通信エラー', 'err');
+        scheduleNext();
+      });
+  }
+
+  function scheduleNext() {
+    clearTimeout(timer); clearInterval(tick);
+    remaining = REFRESH_SEC;
+    updateCountdown();
+    tick = setInterval(function () { remaining--; updateCountdown(); }, 1000);
+    timer = setTimeout(refresh, REFRESH_SEC * 1000);
+  }
+  function updateCountdown() {
+    document.getElementById('countdown').textContent = '次の更新まで ' + Math.max(0, remaining) + ' 秒';
+    document.getElementById('bar').style.transform = 'scaleX(' + Math.max(0, remaining / REFRESH_SEC) + ')';
+  }
+  function showError(msg) { var e = document.getElementById('error'); e.textContent = msg; e.hidden = false; }
+  function hideError() { document.getElementById('error').hidden = true; }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  // -------------------------------------------------------------------------
+  // 機体写真（Planespotters.net の公開 API・キー不要）
+  // CORS が許可されている（access-control-allow-origin: *）ので、サーバー経由ではなく
+  // ブラウザから直接取得する。GAS の UrlFetch 枠も実行時間も消費せず、
+  // getAirportStatus の応答は今までどおりの速さのまま。
+  // -------------------------------------------------------------------------
+  var PHOTO_API = 'https://api.planespotters.net/pub/photos/';
+  var PHOTO_TTL_MS = 7 * 24 * 3600 * 1000;  // 「写真あり」を localStorage に保持する期間
+  var PHOTO_NEG_TTL_MS = 24 * 3600 * 1000;  // 「写真なし」を保持する期間（短め。後から投稿される場合がある）
+  // Planespotters の公開 API は短時間に多数投げると 403/429 を返す。
+  // 同時数・間隔・1 回の更新あたりの件数を絞り、足りない分は次の更新に回す。
+  var PHOTO_CONCURRENCY = 2;                // 同時取得数の上限
+  var PHOTO_MIN_GAP_MS = 600;               // リクエストの最小間隔
+  var PHOTO_MAX_PER_CYCLE = 8;              // 1 回の描画で新規に照会する最大件数
+  var PHOTO_TIMEOUT_MS = 8000;
+  var PHOTO_BACKOFF_MS = 20000;             // レート制限を受けたときの待ち時間（倍々で伸ばす）
+  var PHOTO_BACKOFF_MAX_MS = 300000;
+  var photoMem = {};    // キー → {src,link,by}（写真あり）/ null（写真なし）
+  var photoAsked = {};  // キー → true（取得済み・取得中・待ち行列にある）
+  var photoQueue = [];
+  var photoActive = 0;
+  var photoNextAt = 0;  // 次のリクエストを投げてよい時刻
+  var photoTimer = null;
+  var photoBackoffMs = 0;
+  var photoCycleLeft = PHOTO_MAX_PER_CYCLE;
+
+  function photoReg(a) { var r = (a.reg || '').toUpperCase(); return /^[A-Z0-9][A-Z0-9-]{1,9}$/.test(r) ? r : ''; }
+  function photoHex(a) { var h = (a.hex || '').toLowerCase().replace(/[^0-9a-f]/g, ''); return h.length === 6 ? h : ''; }
+  /** 写真のキャッシュキー。登録記号を優先し、無ければ ICAO24 hex を使う */
+  function photoKey(a) { var r = photoReg(a); if (r) return 'r:' + r; var h = photoHex(a); return h ? 'h:' + h : ''; }
+
+  /** @return {Object|null|undefined} 写真 / 写真なし / 未取得（期限切れを含む） */
+  function photoLoad(key) {
+    try {
+      var raw = localStorage.getItem('pp:' + key);
+      if (!raw) return undefined;
+      var o = JSON.parse(raw);
+      if (!o.t || (new Date().getTime() - o.t) > (o.p ? PHOTO_TTL_MS : PHOTO_NEG_TTL_MS)) {
+        localStorage.removeItem('pp:' + key);
+        return undefined;
+      }
+      return o.p || null;
+    } catch (e) { return undefined; }
+  }
+  function photoSave(key, p) {
+    try { localStorage.setItem('pp:' + key, JSON.stringify({ t: new Date().getTime(), p: p || null })); } catch (e) {}
+  }
+
+  // 起動時に期限切れの写真キャッシュを掃除する（photoLoad が期限切れを削除する）
+  (function () {
+    try {
+      var keys = [], i, k;
+      for (i = 0; i < localStorage.length; i++) {
+        k = localStorage.key(i);
+        if (k && k.indexOf('pp:') === 0) keys.push(k.slice(3));
+      }
+      keys.forEach(photoLoad);
+    } catch (e) {}
+  })();
+
+  function photoEnqueue(key, reg, hex) {
+    if (photoAsked[key]) return;
+    var cached = photoLoad(key);
+    if (cached !== undefined) { photoMem[key] = cached; photoAsked[key] = true; return; }
+    if (photoCycleLeft <= 0) return; // 今回の更新では照会しない（次の更新で拾う）
+    photoCycleLeft--;
+    photoAsked[key] = true;
+    photoQueue.push({ key: key, reg: reg, hex: hex });
+    photoPump();
+  }
+  /** 画面から消えた機体の取得予約を取り消す（描画のたびに呼ぶ）。取得中のものはそのまま続行する */
+  function photoResetQueue() {
+    while (photoQueue.length) { delete photoAsked[photoQueue.pop().key]; }
+    photoCycleLeft = PHOTO_MAX_PER_CYCLE;
+  }
+  function photoPump() {
+    if (photoTimer || !photoQueue.length || photoActive >= PHOTO_CONCURRENCY) return;
+    var now = new Date().getTime();
+    if (now < photoNextAt) {
+      photoTimer = setTimeout(function () { photoTimer = null; photoPump(); }, photoNextAt - now);
+      return;
+    }
+    photoNextAt = now + PHOTO_MIN_GAP_MS;
+    photoActive++;
+    photoRun(photoQueue.shift());
+    photoPump();
+  }
+  function photoRun(job) {
+    // 登録記号があればそれで照会し、無ければ hex で照会する。
+    // どちらも同じ機体レコードを引くので 1 機につき 1 リクエストに抑える（レート制限対策）。
+    var url = job.reg ? PHOTO_API + 'reg/' + encodeURIComponent(job.reg)
+                      : PHOTO_API + 'hex/' + encodeURIComponent(job.hex);
+    var failed = false;   // 一時的な障害。「写真なし」として保存しない
+    var limited = false;  // レート制限。次のリクエストまで待つ
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.timeout = PHOTO_TIMEOUT_MS;
+    xhr.onload = function () {
+      var p = null;
+      if (xhr.status === 200) {
+        try {
+          var list = JSON.parse(xhr.responseText).photos;
+          if (list && list.length) {
+            var th = list[0].thumbnail_large || list[0].thumbnail;
+            if (th && th.src) p = { src: th.src, link: list[0].link || '', by: list[0].photographer || '' };
+          }
+        } catch (e) { failed = true; } // 応答が壊れている = 一時的な障害として扱う
+      } else {
+        // 403/429 はレート制限、5xx は一時的な障害。どちらも「写真なし」と区別して長期キャッシュしない
+        failed = true;
+        if (xhr.status === 403 || xhr.status === 429 || xhr.status >= 500) limited = true;
+      }
+      finish(p);
+    };
+    xhr.onerror = xhr.ontimeout = function () { failed = true; finish(null); };
+    xhr.send();
+
+    function finish(p) {
+      photoActive--;
+      photoMem[job.key] = p;
+      if (p || !failed) {
+        photoSave(job.key, p);
+        photoBackoffMs = 0;
+      } else {
+        delete photoAsked[job.key]; // 取得失敗。次の描画でもう一度試す
+        if (limited) {
+          photoBackoffMs = Math.min(photoBackoffMs ? photoBackoffMs * 2 : PHOTO_BACKOFF_MS, PHOTO_BACKOFF_MAX_MS);
+          photoNextAt = new Date().getTime() + photoBackoffMs;
+        }
+      }
+      photoApply(job.key);
+      photoPump();
+    }
+  }
+
+  function photoHtml(key) {
+    var p = key ? photoMem[key] : null;
+    if (!p) return '<div class="photo"><span class="ph">✈</span></div>';
+    var by = p.by || 'Planespotters';
+    var img = '<img src="' + esc(p.src) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' +
+              '<span class="cred">© ' + esc(by) + ' / Planespotters.net</span>';
+    if (!p.link) return '<div class="photo">' + img + '</div>';
+    return '<a class="photo" href="' + esc(p.link) + '" target="_blank" rel="noopener noreferrer" title="' +
+           esc(by) + ' / Planespotters.net の写真ページを開く">' + img + '</a>';
+  }
+  /** カード右側の写真枠。未取得なら取得を予約し、まずはプレースホルダを返す */
+  function photoBlock(a) {
+    var key = photoKey(a);
+    if (!key) return '<div class="photo-wrap">' + photoHtml('') + '</div>';
+    photoEnqueue(key, photoReg(a), photoHex(a));
+    return '<div class="photo-wrap" data-pkey="' + esc(key) + '">' + photoHtml(key) + '</div>';
+  }
+  /** 取得完了した写真を、今表示されている同じ機体の枠すべてに差し込む */
+  function photoApply(key) {
+    var html = photoHtml(key);
+    var list = document.querySelectorAll('[data-pkey="' + key.replace(/["\\]/g, '') + '"]');
+    for (var i = 0; i < list.length; i++) list[i].innerHTML = html;
+  }
+
+  function render(d) {
+    photoResetQueue();
+    document.getElementById('nGround').textContent = d.onGround.length;
+    document.getElementById('nArr').textContent = d.arriving.length;
+    document.getElementById('nDep').textContent = d.departing.length;
+
+    var build = {
+      ground: function () { return d.onGround.length ? d.onGround.map(function (a) { return card(a, 'ground'); }).join('') : empty('現在、この空港で受信できる機体はありません'); },
+      arriving: function () { return d.arriving.length ? d.arriving.map(function (a) { return card(a, 'arriving'); }).join('') : empty('到着予定の機体は見つかりません（周辺約220kmの範囲）'); },
+      departing: function () { return d.departing.length ? d.departing.map(function (a) { return card(a, 'departing'); }).join('') : empty('出発直後の機体はありません'); },
+      nearby: function () { return d.nearbySpecial.length ? '<h2>★ 周辺を飛行中の特別塗装機（この空港には向かっていません）</h2>' + d.nearbySpecial.map(function (a) { return card(a, 'nearby'); }).join('') : ''; }
+    };
+    // 1 回の更新で照会できる写真の件数には上限があるので、今開いているタブの機体を先に組み立てる
+    var active = document.querySelector('main section.on');
+    var order = [active ? active.id : 'ground', 'nearby', 'ground', 'arriving', 'departing'];
+    var html = {};
+    order.forEach(function (id) { if (build[id] && html[id] === undefined) html[id] = build[id](); });
+    Object.keys(html).forEach(function (id) { document.getElementById(id).innerHTML = html[id]; });
+  }
+  function empty(msg) { return '<div class="empty">' + esc(msg) + '</div>'; }
+
+  function card(a, mode) {
+    var cls = 'card' + (a.special ? ' special' : '');
+    var badges = '';
+    if (a.special) badges += '<span class="badge gold">★ 特別塗装</span>';
+    if (a.phase === 'landing') badges += '<span class="badge green">着陸中</span>';
+    if (a.phase === 'takeoff') badges += '<span class="badge blue">離陸中</span>';
+    if (mode === 'ground' && !a.phase && a.gsKt > 5) badges += '<span class="badge">走行中</span>';
+    if (mode === 'arriving' && a.confidence === 'heuristic') badges += '<span class="badge guess">推定</span>';
+
+    var right = '';
+    if (mode === 'ground') {
+      right = a.phase ? '<div class="big">' + fmtAlt(a.altFt) + '</div><div class="sub">' + Math.round(a.gsKt || 0) + ' kt</div>'
+                      : '<div class="big">' + (a.gsKt > 5 ? Math.round(a.gsKt) + ' kt' : '停止') + '</div><div class="sub">地上</div>';
+    } else if (mode === 'arriving') {
+      right = '<div class="big">' + (a.etaMin == null ? '--' : 'あと約' + a.etaMin + '分') + '</div><div class="sub">' + a.distKm + ' km・' + fmtAlt(a.altFt) + '</div>';
+    } else {
+      right = '<div class="big">' + a.distKm + ' km</div><div class="sub">' + fmtAlt(a.altFt) + (a.vsFpm != null ? (a.vsFpm >= 0 ? ' ↑' : ' ↓') : '') + '</div>';
+    }
+
+    var airlineTxt = a.airline || (a.special && a.special.airline) || (a.airlineCode ? a.airlineCode : '');
+    var routeTxt = '';
+    if (a.route && (a.route.origin || a.route.dest)) {
+      routeTxt = '<div class="route">' + (a.route.origin ? esc(a.route.origin.name) + '（' + esc(a.route.origin.iata || a.route.origin.icao) + '）' : '?') +
+                 ' → <b>' + (a.route.dest ? esc(a.route.dest.name) + '（' + esc(a.route.dest.iata || a.route.dest.icao) + '）' : '?') + '</b></div>';
+    }
+    var specialTxt = a.special ? '<div class="special-note"><i style="background:' + esc(a.special.color) + '"></i>' + esc(a.special.name) + '　' + esc(a.special.note) + '</div>' : '';
+
+    return '<div class="' + cls + '">' +
+      '<div class="reg">' + esc(a.reg || '(登録記号不明)') + badges + '</div>' +
+      '<div class="right">' + photoBlock(a) + right + '</div>' +
+      '<div class="type">' + esc(a.special ? a.special.type : a.typeName) + (a.typeCode && !a.special ? ' <span class="sub">(' + esc(a.typeCode) + ')</span>' : '') + '</div>' +
+      '<div class="airline">' + esc(airlineTxt) + (a.callsign ? ' <span class="callsign">' + esc(a.callsign) + '</span>' : '') + '</div>' +
+      routeTxt + specialTxt +
+      '</div>';
+  }
+  function fmtAlt(ft) { return ft == null ? '--' : (ft === 0 ? '地上' : Math.round(ft / 100) * 100 + ' ft'); }
+
+  document.addEventListener('visibilitychange', function () {
+    // バックグラウンドから戻ったら即更新して無駄なタイマーを止める
+    if (document.hidden) { clearTimeout(timer); clearInterval(tick); }
+    else refresh();
+  });
+
+  refresh();
+</script>
+</body>
+</html>

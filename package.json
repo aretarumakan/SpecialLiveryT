@@ -1,0 +1,12 @@
+{
+  "name": "special-livery-t",
+  "version": "1.0.0",
+  "private": true,
+  "description": "空港ウォッチ — 日本の空港にいる機体・到着予定・特別塗装機をリアルタイム表示",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node test/run.js",
+    "dev": "vercel dev"
+  }
+}
