@@ -285,11 +285,15 @@ test('通報が 3 件たまった写真は承認待ちに戻り、代表写真�
   const p2 = db.mock.addPhoto({ livery_id: l.id, user_id: 'user1', credit_name: '次の人', status: 'approved', created_at: '2026-02-01T00:00:00.000Z' });
   assert.equal(db.mock.store().photos.find((p) => p.id === p1.id).is_primary, true);
 
+  // 非表示の判定は「通報した人数」。同じ人が重ねて出しても増えない（0004_hardening.sql）
+  const reporters = ['mock:user1', 'mock:user2'];
   for (let i = 1; i <= 2; i += 1) {
-    const r = await call(report, { as: 'mock:user1', method: 'POST', body: { targetType: 'photo', targetId: p1.id, reason: `通報 ${i}` } });
+    const r = await call(report, { as: reporters[i - 1], method: 'POST', body: { targetType: 'photo', targetId: p1.id, reason: `通報 ${i}` } });
     assert.equal(r.body.count, i);
     assert.equal(r.body.hidden, false);
   }
+  const dup = await call(report, { as: 'mock:user1', method: 'POST', body: { targetType: 'photo', targetId: p1.id, reason: '同じ人の 2 回目' } });
+  assert.equal(dup.code, 409);
   assert.equal(db.mock.store().photos.find((p) => p.id === p1.id).status, 'approved');
 
   const third = await call(report, { as: 'mock:admin', method: 'POST', body: { targetType: 'photo', targetId: p1.id, reason: '通報 3' } });
@@ -623,8 +627,9 @@ test('自動承認された写真も通報 3 件で承認待ちに戻る', async
   await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'finalize', photoId: p.id } });
   assert.equal(db.mock.store().photos.find((x) => x.id === p.id).status, 'approved');
 
-  for (let i = 1; i <= 3; i += 1) {
-    await call(report, { as: 'mock:user1', method: 'POST', body: { targetType: 'photo', targetId: p.id, reason: `通報 ${i}` } });
+  // 別々の 3 人から通報されたときだけ非表示になる
+  for (const who of ['mock:user1', 'mock:user2', 'mock:admin']) {
+    await call(report, { as: who, method: 'POST', body: { targetType: 'photo', targetId: p.id, reason: `通報 ${who}` } });
   }
   const row = db.mock.store().photos.find((x) => x.id === p.id);
   assert.equal(row.status, 'pending');

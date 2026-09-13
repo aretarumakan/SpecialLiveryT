@@ -9,6 +9,21 @@ import { ImageResponse } from '@vercel/og';
 import { getLiveryPageData } from '../lib/db.js';
 import { buildOgElement, loadJpFonts, OG_WIDTH, OG_HEIGHT } from '../lib/og-render.js';
 
+/**
+ * 画像として読みに行ってよい URL だけを通す（多層防御。設計 §1）。
+ * 本物の Storage の公開 URL か、モックの種データ（data:）のみ。
+ * @param {string|null} url
+ * @returns {string|null}
+ */
+export function allowedPhotoUrl(url) {
+  const s = String(url == null ? '' : url);
+  if (!s) return null;
+  if (s.startsWith('data:')) return process.env.MOCK_DB === '1' || !process.env.SUPABASE_URL ? s : null;
+  const base = String(process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+  if (!base) return null;
+  return s.startsWith(`${base}/storage/v1/object/public/`) ? s : null;
+}
+
 export default async function handler(req, res) {
   const reg = String((req.query && req.query.reg) || '').trim().toUpperCase();
 
@@ -21,13 +36,14 @@ export default async function handler(req, res) {
 
   const livery = data && data.liveries.length ? data.liveries[0] : null;
   const photo = data && data.photos.length ? data.photos[0] : null;
+  const url = photo ? photo.url : (livery && livery.photoUrl) || null;
   const { element, text } = buildOgElement({
     name: livery ? livery.name : '特別塗装機',
     reg: reg || '',
     airline: livery ? livery.airline : '',
     type: livery ? livery.type : '',
     credit: photo ? photo.credit : (livery && livery.credit) || '',
-    photoUrl: photo ? photo.url : (livery && livery.photoUrl) || null,
+    photoUrl: allowedPhotoUrl(url),
     color: livery ? livery.color : null,
   });
 

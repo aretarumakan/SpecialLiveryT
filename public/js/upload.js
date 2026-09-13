@@ -22,6 +22,8 @@ const MAIN_Q = 0.85;
 const THUMB_EDGE = 320;
 const THUMB_Q = 0.8;
 const MAX_BYTES = 3 * 1024 * 1024;      // 0002_storage.sql の file_size_limit と同じ
+// 1 日あたりの投稿上限（0004_hardening.sql の under_daily_limit / lib/db.js の DAILY_LIMITS と同じ）
+const DAILY_LIMITS = { photos: 30, liveries: 20 };
 const ADSBDB = 'https://api.adsbdb.com/v0/aircraft/';
 
 /** adsbdb の icao_type → 画面の機種表記（lib/liveries.js の表記に寄せる） */
@@ -115,6 +117,26 @@ async function sb() {
   return client;
 }
 
+/**
+ * supabase-js の insert エラーを画面の文言に直す（0004_hardening.sql の RLS / CHECK）。
+ *
+ * `42501` は RLS の with check 違反。1 つのポリシーに「本人・承認待ち・保存先・1 日の上限」を
+ * まとめて書いてあり（permissive なポリシーを分けると OR で結ばれて制限にならない）、
+ * Postgres はどの条件で落ちたかを教えてくれないので、上限と権限をまとめて案内する。
+ *
+ * @param {{code?:string, message?:string}} error
+ * @param {'photo'|'livery'} kind
+ */
+function insertErrorMessage(error, kind) {
+  const code = String((error && error.code) || '');
+  const limit = kind === 'photo' ? DAILY_LIMITS.photos : DAILY_LIMITS.liveries;
+  if (code === '42501') {
+    return `1 日の投稿上限（${limit} 件）に達しました、または権限がありません。時間をおいてお試しください。`;
+  }
+  if (code === '23514') return '保存先の形式が不正です。ページを再読み込みしてもう一度お試しください。';
+  return (error && error.message) || '登録に失敗しました';
+}
+
 /** liveries に 1 行入れる。RLS が通る形（created_by = 自分・status = pending）で送る */
 async function insertLivery(row) {
   if (isMock) return mockdb.insertLivery(row, session.user.id);
@@ -126,7 +148,7 @@ async function insertLivery(row) {
     .single();
   if (error) {
     if (String(error.code) === '23505') throw new Error('同じ機体に同じ塗装機名が既に登録されています。写真の追加をお使いください。');
-    throw new Error(error.message || '塗装機の登録に失敗しました');
+    throw new Error(insertErrorMessage(error, 'livery'));
   }
   return data;
 }
@@ -180,7 +202,7 @@ async function insertPhoto(photoRow, livery, images) {
   if (error) {
     // 行が作れなかった画像は残さない（失敗時の後始末。定期清掃は管理者タスク）
     await store.remove([path, thumbPath]).catch(() => {});
-    throw new Error('写真の登録に失敗しました: ' + error.message);
+    throw new Error('写真の登録に失敗しました: ' + insertErrorMessage(error, 'photo'));
   }
   return data;
 }

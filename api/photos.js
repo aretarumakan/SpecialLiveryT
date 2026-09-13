@@ -14,7 +14,7 @@
  *  - 設定が読めなかったときは承認しない（pending のまま＝管理者が見る）
  */
 import { requireUser, readBody, rejectNonPost, sendError } from '../lib/auth.js';
-import { adminUpdateStatus, getPhotoForFinalize, getSetting } from '../lib/db.js';
+import { adminUpdateStatus, assertPhotoPaths, getPhotoForFinalize, getSetting } from '../lib/db.js';
 
 export default async function handler(req, res) {
   if (rejectNonPost(req, res)) return;
@@ -41,6 +41,9 @@ export default async function handler(req, res) {
     if (photo.status !== 'pending') {
       return res.status(200).json({ status: photo.status, autoApprove: false });
     }
+    // 保存先の再検証（他人のフォルダ・外部 URL を公開しない。設計 §1）。
+    // 形式が違えば 400 で承認しない（行自体は残るので管理者が見て消せる）
+    assertPhotoPaths({ user_id: photo.userId, storage_path: photo.storagePath, thumb_path: photo.thumbPath });
 
     let auto = false;
     try {

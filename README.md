@@ -44,7 +44,7 @@
 | `lib/db.js` | 塗装機 DB のアクセス層。Supabase（PostgREST に素の fetch）とメモリ内モックを同じ関数で提供 |
 | `lib/airports.js` | 日本の主要 45 空港（ICAO/IATA/座標/空港とみなす半径） |
 | `lib/liveries.js` | 特別塗装機の初期データ・航空会社名・機種名の辞書 |
-| `supabase/migrations/` | Postgres スキーマ・RLS・Storage ポリシー・初期データ・アプリ設定（`0003_settings.sql`） |
+| `supabase/migrations/` | Postgres スキーマ・RLS・Storage ポリシー・初期データ・アプリ設定（`0003_settings.sql`）・セキュリティ強化（`0004_hardening.sql`） |
 | `supabase/README.md` | 所有者が行う Supabase の設定手順（admin 昇格の SQL 1 行を含む） |
 | `test/dev-server.js` | 依存なしのローカルサーバー（`vercel dev` の代わり）。`public/` 配信 + `api/*.js` のマウント |
 | `test/*.test.js` | 単体テスト（`node --test test/`） |
@@ -93,9 +93,9 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 |---|---|---|
 | `SUPABASE_URL` | 本番のみ | Supabase プロジェクトの URL。未設定ならモック（`lib/liveries.js` の 11 件）で動く |
 | `SUPABASE_ANON_KEY` | 本番のみ | 公開可。`/api/config` 経由でブラウザに渡す |
-| `SUPABASE_SERVICE_ROLE_KEY` | 本番のみ | サーバー専用。承認・却下 API だけが使う |
+| `SUPABASE_SERVICE_ROLE_KEY` | 本番のみ | サーバー専用。承認・却下 API だけが使う。Vercel では **Secret（Sensitive）** として保存する |
 | `GOOGLE_CLIENT_ID` | 本番のみ | Google の **ウェブ アプリケーション** クライアント ID。公開可（`/api/config` の `googleClientId` でブラウザに渡す）。未設定だと `/login.html` が「Google ログインが未設定です（GOOGLE_CLIENT_ID）」と出す |
-| `MOCK_DB` | 任意 | `1` にすると `SUPABASE_URL` があってもモックで動く |
+| `MOCK_DB` | 任意 | `1` にすると `SUPABASE_URL` があってもモックで動く。**本番には設定しない**（本物の DB を見なくなる） |
 | `MOCK_SEED_PENDING` | 任意 | `1` でモックにダミーを入れる（承認待ち: 塗装機2・写真2・通報1／承認済み: JA819A の写真1）。`npm run dev` が自動で付ける |
 
 コードパスの分岐は `lib/db.js`（サーバー側）と `public/js/common.js`（ブラウザ側）の 2 箇所で判定し、
@@ -105,6 +105,32 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 ### Supabase のセットアップ
 
 `supabase/README.md` を参照（SQL の実行順、OAuth、admin 昇格の 1 行 SQL、Vercel の環境変数）。
+
+## セキュリティ（どこで何を守っているか）
+
+設計は `docs/design-security-hardening.md`。要点と「効かせている場所」:
+
+| 守るもの | 場所 | 内容 |
+|---|---|---|
+| 写真の保存先 | `0004_hardening.sql`（CHECK + RLS）／`lib/db.js` の `assertPhotoPaths()` | `{user_id}/{uuid}.jpg` と `{uuid}_thumb.jpg` だけ。他人のフォルダ・外部 URL は入らない。承認（`/api/photos` の finalize と `/api/admin/approve`）でも再検証し、外れていれば **400 で承認しない** |
+| 外部 URL の読み込み | `lib/db.js publicPhotoUrl()`／`api/og.js allowedPhotoUrl()` | 本番では `http(s)://` と `data:` を **null** にし、OG 画像は `{SUPABASE_URL}/storage/v1/object/public/` で始まる URL しか読まない |
+| 写真の付け替え | `0004_hardening.sql`（`photos_update` + `photos_guard_update` トリガー） | 自分の写真を直せるのは承認待ちのあいだだけ。`livery_id` / `storage_path` / `thumb_path` / `user_id` は変えられない。自分を代表写真にもできない |
+| 通報の水増し | `0004_hardening.sql`（部分ユニーク索引）／`lib/db.js addReport()` | 同じ人が同じ対象に出せる未解決の通報は 1 件（**409**）。自動非表示（3 件）は**通報した人数**で数える |
+| 投稿の量 | `0004_hardening.sql` の `under_daily_limit()`（RLS）／`lib/db.js DAILY_LIMITS` | 1 日あたり 写真 30・塗装機 20・通報 20。超えたら投稿は RLS で弾かれ（画面は「1 日の投稿上限に達しました…」）、通報は **429** |
+| バケットの一覧 | `0004_hardening.sql` | `livery-photos public read` を削除。公開オブジェクトの取得（`/object/public/...`）は今までどおり 200 で、一覧（list）だけが service role 限定になる |
+| ヘッダ | `vercel.json` | 全パスに `X-Content-Type-Options: nosniff` / `Referrer-Policy: strict-origin-when-cross-origin` / `X-Frame-Options: DENY` / `Permissions-Policy: camera=(), microphone=(), geolocation=()`。`test/dev-server.js` も同じ規則を読んで当てるのでローカルで `curl -I` して確認できる |
+| role の露出 | `lib/db.js` の各ビュー | `/api/livery` と `/api/liveries` の撮影者情報に `role` を含めない（`test/security.test.js` で固定） |
+
+**CSP は入れていない**。GIS・supabase-js の CDN・`data:` 画像・インラインスクリプトが多く、
+今の構成のまま壊さずに書くのが難しいため（将来やるならインライン script の外出しから）。
+
+運用上の注意:
+
+- **本番で `MOCK_DB=1` を設定しない**。設定すると本物の DB を見ずにモックの 11 件だけを返し、投稿も通報も保存されない
+- `SUPABASE_SERVICE_ROLE_KEY` は Vercel の **Secret（Sensitive）** として保存する。RLS を素通りする鍵なので、
+  漏れたら Supabase 側でローテーションする
+- service role キーを使う書き込みは RLS に守られないので、入力の検証は `lib/db.js`
+  （`parsePositiveId` / `cleanReason` / `parseUserId` / `assertPhotoPaths`）で必ず行う
 
 ## 特別塗装機の追加
 - 利用者: `/liveries.html` → 「あなたの写真を載せませんか」／`/submit.html` から投稿し、管理者が `/admin.html` で承認する

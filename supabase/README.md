@@ -17,6 +17,7 @@ SQL Editor で、次の順にファイルの中身を貼り付けて実行する
 | 1 | `supabase/migrations/0001_init.sql` | テーブル（profiles / liveries / photos / reports）、RLS、トリガー、初期 11 件の塗装データ |
 | 2 | `supabase/migrations/0002_storage.sql` | バケット `livery-photos`（public read・3MB・JPEG のみ）と Storage ポリシー |
 | 3 | `supabase/migrations/0003_settings.sql` | アプリ設定 `app_settings`（写真の自動承認。既定 ON）。**既に動かしている場合もこれだけ追加で実行する** |
+| 4 | `supabase/migrations/0004_hardening.sql` | セキュリティ強化（写真パスの検証・通報の重複防止・投稿の 1 日上限・バケットの一覧を閉じる）。**0003 の後に実行する**。事前確認は下の「7.」 |
 
 いずれも再実行しても壊れないように書いてある（`if not exists` / `drop policy if exists` / `on conflict`）。
 `0003` を実行していないと `/admin.html` の「設定」が読めず、写真の自動承認は働かない（＝全部が承認待ちになる）。
@@ -108,6 +109,53 @@ Supabase の値は Project Settings → **API**、`GOOGLE_CLIENT_ID` は Google 
 3. `/api/status?icao=RJTT` の `special` に `liveryId` が入っている
 4. （フェーズ C 以降）`/admin.html` で承認待ちバッジが出る
 5. `/api/config` の `autoApprovePhotos` が `true`（= 0003 が入っている）
+
+## 7. 0004_hardening.sql の事前・事後チェック
+
+`0004` は**稼働中の DB**に当てる。順番は「コードのデプロイ → SQL の実行」（コードは DB 変更前でも壊れない）。
+
+### 事前確認（SQL Editor）
+
+既存の写真行が新しい規約（`{user_id}/{uuid}.jpg` と `{uuid}_thumb.jpg`）から外れていないかを先に見る。
+**0 行なら**そのまま `0004` を実行してよい。
+
+```sql
+-- 形式から外れている写真（0 行であること）
+select id, user_id, storage_path, thumb_path
+  from public.photos
+ where storage_path !~ ('^' || user_id::text || '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$')
+    or thumb_path is distinct from regexp_replace(storage_path, '\.jpg$', '_thumb.jpg')
+ order by id;
+
+-- 同じ人が同じ対象に出した未解決の通報が重複していないか（0 行であること）
+select target_type, target_id, reporter_id, count(*)
+  from public.reports
+ where not resolved and reporter_id is not null
+ group by 1, 2, 3 having count(*) > 1;
+```
+
+見つかったときの片付け方:
+
+- 写真: その行を消す（Storage のファイルも `/admin.html` の「孤児掃除」で片付く）か、
+  正しいパスに `update` する。消せない事情があるなら `validate constraint` の 2 行だけを飛ばして実行し、
+  制約は「新しい行にだけ効く」状態（`not valid`）で残す
+- 通報: 古い方を `update public.reports set resolved = true where id = ...` で解決済みにする
+
+### 事後確認
+
+1. 写真の**公開 URL が 200 で開ける**（`livery-photos public read` ポリシーを消しても、public バケットの
+   オブジェクト取得は動く。止まるのは「一覧（list）」だけ）
+
+   ```bash
+   curl -I "https://<ref>.supabase.co/storage/v1/object/public/livery-photos/<user_id>/<uuid>.jpg"
+   # → HTTP/2 200
+   ```
+
+2. `/submit.html` から写真を投稿 → 公開される
+3. 同じ写真への 2 回目の通報が「この対象は既に通報済みです」になる
+4. `/admin.html` の承認・却下・代表写真の差し替えが動く
+5. `/api/admin/sweep`（孤児掃除）が今までどおり一覧を取れる（service role なので影響しない）
+6. `curl -I https://special-livery-t.vercel.app/` に `X-Frame-Options: DENY` などが付いている
 
 ## バックアップ
 

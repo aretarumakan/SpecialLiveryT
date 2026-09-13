@@ -189,6 +189,31 @@ export function storagePaths(uid, uuid) {
   return { path: `${dir}/${id}.jpg`, thumbPath: `${dir}/${id}_thumb.jpg` };
 }
 
+/**
+ * 写真の保存先の形（1 か所に定義する）。
+ * ここの規則は 0004_hardening.sql の photos_storage_path_chk / photos_thumb_path_chk と
+ * 同じもので、サーバー側は lib/db.js の assertPhotoPaths() がこれを使って再検証する。
+ */
+export const PHOTO_UUID_SRC = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+
+function escapeRe(s) {
+  return String(s == null ? '' : s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** そのユーザーの storage_path として使える形か（`{uid}/{uuid}.jpg` のみ） */
+export function isValidStoragePath(uid, path) {
+  const dir = String(uid == null ? '' : uid).trim();
+  const p = String(path == null ? '' : path);
+  if (!dir || !p) return false;
+  return new RegExp(`^${escapeRe(dir)}/${PHOTO_UUID_SRC}\\.jpg$`).test(p);
+}
+
+/** storage_path に対応するサムネイルのパス（`.jpg` → `_thumb.jpg`） */
+export function thumbPathFor(path) {
+  const p = String(path == null ? '' : path);
+  return /\.jpg$/.test(p) ? p.replace(/\.jpg$/, '_thumb.jpg') : '';
+}
+
 /** 表示名（クレジット）として許せるか */
 export function validateDisplayName(input) {
   const name = String(input == null ? '' : input).trim();

@@ -39,6 +39,29 @@ const MIME = {
   '.map': 'application/json; charset=utf-8',
 };
 
+/**
+ * vercel.json の `headers` を読んで [{re, headers}] にする。
+ * 本番と同じセキュリティヘッダをローカルでも確認できるようにするため
+ * （`curl -I http://localhost:3000/` で本番と同じものが返る）。
+ */
+export async function loadHeaderRules(file = path.join(ROOT, 'vercel.json')) {
+  let conf = {};
+  try { conf = JSON.parse(await fsp.readFile(file, 'utf8')); } catch { return []; }
+  return (conf.headers || []).map((entry) => ({
+    // vercel.json の source は path-to-regexp。ここで使うのは `/(.*)` 形式だけなので
+    // `:param` を雑に読み替えず、そのまま正規表現として解釈する
+    re: new RegExp('^' + String(entry.source || '') + '$'),
+    headers: entry.headers || [],
+  }));
+}
+
+function applyHeaderRules(rules, res, pathname) {
+  for (const rule of rules) {
+    if (!rule.re.test(pathname)) continue;
+    for (const h of rule.headers) res.setHeader(h.key, h.value);
+  }
+}
+
 /** Vercel の res に寄せた最小限の shim を生やす */
 function shimRes(res) {
   res.status = (code) => { res.statusCode = code; return res; };
@@ -159,12 +182,14 @@ async function serveStatic(req, res, pathname) {
 
 export async function createServer() {
   const routes = await listApiRoutes();
+  const headerRules = await loadHeaderRules();
   const liveryPage = routes.has('livery-page') ? routes.get('livery-page') : null;
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     const pathname = url.pathname;
     shimRes(res);
+    applyHeaderRules(headerRules, res, pathname);
     res.setHeader('Access-Control-Allow-Origin', '*');
 
     try {

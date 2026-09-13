@@ -269,8 +269,14 @@
         method: 'POST', headers: headers,
         body: JSON.stringify({ targetType: type, targetId: id, reason: reason })
       }).then(function (r) {
-        return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+        return r.json().catch(function () { return {}; }).then(function (body) {
+          return { ok: r.ok, status: r.status, body: body };
+        });
       }).then(function (r) {
+        // 409 = 同じ人が同じ対象に出した未解決の通報が既にある（0004_hardening.sql）
+        if (r.status === 409) { toast('この対象は既に通報済みです'); return null; }
+        // 429 = 1 日の通報上限
+        if (r.status === 429) { toast((r.body && r.body.error) || '通報が多すぎます。時間をおいてお試しください'); return null; }
         if (!r.ok) throw new Error((r.body && r.body.error) || '通報に失敗しました');
         toast(r.body.hidden ? '通報しました（通報が重なったため非表示にしました）' : '通報しました。ありがとうございます');
         return r.body;

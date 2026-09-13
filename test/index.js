@@ -18,3 +18,4 @@ import './mockflow.test.js';
 import './admin.test.js';
 import './position.test.js';
 import './livery-page.test.js';
+import './security.test.js';
