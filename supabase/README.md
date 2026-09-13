@@ -21,13 +21,50 @@ SQL Editor で、次の順にファイルの中身を貼り付けて実行する
 いずれも再実行しても壊れないように書いてある（`if not exists` / `drop policy if exists` / `on conflict`）。
 `0003` を実行していないと `/admin.html` の「設定」が読めず、写真の自動承認は働かない（＝全部が承認待ちになる）。
 
-## 3. 認証プロバイダ
+## 3. 認証プロバイダ（Google）
 
-Authentication → **Providers** で Google を有効化（任意で X / Twitter も）。
+ログインは **Google Identity Services（GIS）を自サイトのオリジンで動かし**、受け取った ID トークンを
+`supabase.auth.signInWithIdToken({ provider: 'google', token, nonce })` に渡す方式。
+Supabase のリダイレクト（`https://<ref>.supabase.co/auth/v1/callback`）を経由しないので、
+Google の同意画面には **アプリ名「スペマウォッチ」と自分のドメイン**が出る（`xxxx.supabase.co` は出ない）。
 
-- Authorized redirect URL に Supabase が表示する `https://<ref>.supabase.co/auth/v1/callback` を Google 側に登録
-- Authentication → **URL Configuration** の Site URL / Redirect URLs に Vercel の URL
-  （例 `https://special-livery-t.vercel.app` と `http://localhost:3000`）を追加
+### 3-1. Google Cloud Console（https://console.cloud.google.com）
+
+1. プロジェクトを作る（または既存のものを選ぶ）
+2. **API とサービス → OAuth 同意画面**
+   - User Type: **外部**、公開ステータスは「本番環境」（テスト中は自分を「テストユーザー」に入れる）
+   - アプリ名: **スペマウォッチ** ← これが同意画面に出る文字
+   - ユーザーサポートメール / デベロッパーの連絡先メール: 自分のアドレス
+   - アプリのロゴ（任意。ロゴを入れると Google の審査が必要になる場合がある）
+   - アプリのホームページ: `https://special-livery-t.vercel.app`
+   - プライバシーポリシー / 利用規約: `https://special-livery-t.vercel.app/terms.html`
+   - 承認済みドメイン: `special-livery-t.vercel.app`（Vercel の独自ドメインを足したらそれも）
+   - スコープは既定のまま（`openid` / `email` / `profile`）。追加スコープは要らない
+3. **API とサービス → 認証情報 → 認証情報を作成 → OAuth クライアント ID**
+   - アプリケーションの種類: **ウェブ アプリケーション**
+   - **承認済みの JavaScript 生成元**（これが GIS で必須）
+     - `https://special-livery-t.vercel.app`
+     - `http://localhost:3000`（ローカル開発用）
+   - **承認済みのリダイレクト URI は不要**（GIS はリダイレクトしない）。
+     `?legacy=1` の旧方式も使えるようにしておきたいときだけ
+     `https://<ref>.supabase.co/auth/v1/callback` を足す
+   - 出てきた **クライアント ID**（`…apps.googleusercontent.com`）と**クライアント シークレット**を控える
+
+### 3-2. Supabase ダッシュボード
+
+Authentication → **Providers → Google** を開いて:
+
+1. **Enable Sign in with Google** を ON
+2. **Client ID** と **Client Secret** に 3-1 で作った値を入れる
+3. **Authorized Client IDs**（＝ "Client IDs" 欄）にも**同じクライアント ID**を入れる。
+   `signInWithIdToken` はこの欄に載っているクライアント ID のトークンしか受け付けない（ここが空だと
+   `Unacceptable audience in id_token` などで弾かれる）
+4. Authentication → **URL Configuration** の Site URL / Redirect URLs に Vercel の URL
+   （例 `https://special-livery-t.vercel.app` と `http://localhost:3000`）を追加
+   （GIS ではリダイレクトしないが、メールリンクや `?legacy=1` のために入れておく）
+
+※「Skip nonce check」は **ON にしない**。このアプリは毎回 nonce を作り、Google にはその SHA-256（hex）を、
+Supabase には生の値を渡している（`public/js/nonce.js`）。
 
 ## 4. 自分を管理者に昇格
 
@@ -52,13 +89,15 @@ select p.id, p.display_name, p.role from public.profiles p where p.role = 'admin
 ## 5. Vercel の環境変数
 
 Vercel → Project → Settings → Environment Variables に次を設定して再デプロイする。
-値は Supabase の Project Settings → **API** にある。
+Supabase の値は Project Settings → **API**、`GOOGLE_CLIENT_ID` は Google Cloud Console にある。
+変更後は **再デプロイ**しないと反映されない。
 
 | 変数 | 値 | 用途 |
 |---|---|---|
 | `SUPABASE_URL` | `https://<ref>.supabase.co` | サーバー・フロント両方 |
 | `SUPABASE_ANON_KEY` | anon public key | 公開可。`/api/config` 経由でフロントに渡す |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role key | **サーバー専用**。管理 API（承認・却下）だけが使う |
+| `GOOGLE_CLIENT_ID` | 3-1 の OAuth クライアント ID | 公開可。`/api/config` の `googleClientId` としてブラウザに渡り、GIS のボタンに使う |
 
 `SUPABASE_URL` が未設定のあいだ、`lib/db.js` は自動でモック（`lib/liveries.js` の 11 件）に切り替わる。
 意図的にモックで動かしたいときは `MOCK_DB=1` を設定する。

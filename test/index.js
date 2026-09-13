@@ -13,6 +13,7 @@ import './db.test.js';
 import './status.test.js';
 import './api.test.js';
 import './validate.test.js';
+import './auth.test.js';
 import './mockflow.test.js';
 import './admin.test.js';
 import './position.test.js';

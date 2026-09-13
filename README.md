@@ -16,12 +16,13 @@
 |---|---|
 | `public/index.html` | スペマウォッチの画面（静的）。`/api/status` を 30 秒ごとに fetch。機体写真は Planespotters API をブラウザから直接取得 |
 | `public/liveries.html` | 承認済み特別塗装の一覧（検索・航空会社チップ・「運航中のみ」） |
-| `public/login.html` | ログイン（Google OAuth。モックではダミーユーザーの 2 ボタン）。初回は表示名の確認 |
+| `public/login.html` | ログイン（Google Identity Services のボタン → `signInWithIdToken`。モックではダミーユーザーの 2 ボタン）。初回は表示名の確認 |
 | `public/submit.html` | 投稿（(a) 新しい塗装を登録 / (b) 既存の塗装に写真を追加）。`public/js/upload.js` が処理 |
 | `public/me.html` | マイページ（自分の投稿と状態、写真の削除、表示名・SNS URL の編集） |
 | `public/admin.html` | 管理画面（admin のみ）。承認待ちの塗装・写真の承認／却下、通報、代表写真の差し替え、設定（写真の自動承認）、管理者の追加／削除、ツール |
 | `public/terms.html` | 利用規約・写真の取り扱い（連絡先は `【連絡先を記入】` を置換する） |
 | `public/css/app.css` | 共通のデザイントークン（CSS 変数）と土台・ナビ・トーストのスタイル |
+| `public/js/nonce.js` | GIS 用の nonce（生 = base64url／Google に渡すのは SHA-256 の hex）。`login.html` と `test/auth.test.js` が使う |
 | `public/js/common.js` | 共通ヘッダ／ナビ、`/api/config` 取得、supabase-js の遅延読み込み、`window.AW`（`getSession` / `requireLogin` / `signOut` / `authHeaders` / `report`）。admin には「管理」リンクと承認待ちバッジを出す |
 | `public/js/upload.js` | 投稿画面の処理（既存塗装の照会・adsbdb 自動入力・Canvas 縮小・Storage upload・insert） |
 | `public/js/validate.js` | 入力検証の純関数（ブラウザと `node --test` で共用。登録記号・URL・日付・表示名） |
@@ -93,6 +94,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 | `SUPABASE_URL` | 本番のみ | Supabase プロジェクトの URL。未設定ならモック（`lib/liveries.js` の 11 件）で動く |
 | `SUPABASE_ANON_KEY` | 本番のみ | 公開可。`/api/config` 経由でブラウザに渡す |
 | `SUPABASE_SERVICE_ROLE_KEY` | 本番のみ | サーバー専用。承認・却下 API だけが使う |
+| `GOOGLE_CLIENT_ID` | 本番のみ | Google の **ウェブ アプリケーション** クライアント ID。公開可（`/api/config` の `googleClientId` でブラウザに渡す）。未設定だと `/login.html` が「Google ログインが未設定です（GOOGLE_CLIENT_ID）」と出す |
 | `MOCK_DB` | 任意 | `1` にすると `SUPABASE_URL` があってもモックで動く |
 | `MOCK_SEED_PENDING` | 任意 | `1` でモックにダミーを入れる（承認待ち: 塗装2・写真2・通報1／承認済み: JA819A の写真1）。`npm run dev` が自動で付ける |
 
@@ -110,7 +112,14 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 
 ### 投稿のしくみ（フェーズ B）
 
-- ログインは Supabase Auth の **Google のみ**（X は `login.html` にコメントアウトで用意。Providers で有効化したら開放する）
+- ログインは **Google のみ**（X は `login.html` にコメントアウトで用意。Providers で有効化したら開放する）
+- Google ログインは **自サイトのオリジンで動く Google Identity Services（GIS）**。
+  `accounts.google.com/gsi/client` を読み、公式ボタン（`google.accounts.id.renderButton`）と One Tap を出し、
+  受け取った ID トークンを `supabase.auth.signInWithIdToken({ provider:'google', token, nonce })` に渡す。
+  Supabase 経由のリダイレクト（`signInWithOAuth`）をやめたので、Google の同意画面には
+  `xxxx.supabase.co` ではなく **アプリ名「スペマウォッチ」と自ドメイン**が出る。
+  nonce は `public/js/nonce.js` が作り、**Google にはハッシュ（SHA-256 hex）・Supabase には生**を渡す。
+  設定手順は `supabase/README.md` の「3. 認証プロバイダ」。`/login.html?legacy=1` で旧方式（リダイレクト）にも落とせる
 - 投稿はサーバー API を通さず、ブラウザから supabase-js で直接 insert / upload する。権限は RLS（`0001_init.sql`）と
   Storage ポリシー（`0002_storage.sql`）が守る。クライアントは RLS が要求する値（`status='pending'`、
   `created_by`／`user_id` = 自分、`is_primary=false`）をそのまま送る

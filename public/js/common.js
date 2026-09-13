@@ -87,7 +87,7 @@
   // 設定と Supabase クライアント
   // ---------------------------------------------------------------------------
 
-  var config = { supabaseUrl: null, supabaseAnonKey: null, mock: true, autoApprovePhotos: true };
+  var config = { supabaseUrl: null, supabaseAnonKey: null, googleClientId: null, mock: true, autoApprovePhotos: true };
   var supabasePromise = null;
 
   /**
@@ -318,6 +318,7 @@
       config = {
         supabaseUrl: c.supabaseUrl || null,
         supabaseAnonKey: c.supabaseAnonKey || null,
+        googleClientId: c.googleClientId || null,
         mock: c.mock !== false,
         autoApprovePhotos: c.autoApprovePhotos !== false
       };

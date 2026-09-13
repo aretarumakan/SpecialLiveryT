@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.MOCK_DB = '1';
+delete process.env.GOOGLE_CLIENT_ID; // publicConfig の googleClientId を null 側で確かめる
 
 const config = (await import('../api/config.js')).default;
 const liveries = (await import('../api/liveries.js')).default;
@@ -20,7 +21,7 @@ test('GET /api/config: モックでは鍵を返さず no-store', async () => {
   const r = res();
   await config({ query: {} }, r);
   assert.equal(r.code, 200);
-  assert.deepEqual(r.body, { supabaseUrl: null, supabaseAnonKey: null, mock: true, autoApprovePhotos: true });
+  assert.deepEqual(r.body, { supabaseUrl: null, supabaseAnonKey: null, googleClientId: null, mock: true, autoApprovePhotos: true });
   assert.equal(r.headers['Cache-Control'], 'no-store');
 });
 

@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.MOCK_DB = '1';
+delete process.env.GOOGLE_CLIENT_ID; // publicConfig の googleClientId は未設定で null
 
 const db = await import('../lib/db.js');
 const { SPECIAL_LIVERIES } = await import('../lib/liveries.js');
@@ -14,7 +15,7 @@ function freshStore() {
 
 test('isMock: MOCK_DB=1 ならモック', () => {
   assert.equal(db.isMock(), true);
-  assert.deepEqual(db.publicConfig(), { supabaseUrl: null, supabaseAnonKey: null, mock: true });
+  assert.deepEqual(db.publicConfig(), { supabaseUrl: null, supabaseAnonKey: null, googleClientId: null, mock: true });
 });
 
 test('getApprovedLiveries: lib/liveries.js の 11 件が登録記号キーで返る', async () => {
