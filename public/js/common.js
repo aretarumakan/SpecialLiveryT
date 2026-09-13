@@ -87,7 +87,7 @@
   // 設定と Supabase クライアント
   // ---------------------------------------------------------------------------
 
-  var config = { supabaseUrl: null, supabaseAnonKey: null, mock: true };
+  var config = { supabaseUrl: null, supabaseAnonKey: null, mock: true, autoApprovePhotos: true };
   var supabasePromise = null;
 
   /**
@@ -314,7 +314,14 @@
 
   var ready = fetch('/api/config', { cache: 'no-store' })
     .then(function (r) { return r.json(); })
-    .then(function (c) { config = { supabaseUrl: c.supabaseUrl || null, supabaseAnonKey: c.supabaseAnonKey || null, mock: c.mock !== false }; })
+    .then(function (c) {
+      config = {
+        supabaseUrl: c.supabaseUrl || null,
+        supabaseAnonKey: c.supabaseAnonKey || null,
+        mock: c.mock !== false,
+        autoApprovePhotos: c.autoApprovePhotos !== false
+      };
+    })
     .catch(function (e) { console.warn('/api/config の取得に失敗しました', e); })
     .then(function () {
       window.AW.config = config;

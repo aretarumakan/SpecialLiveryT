@@ -253,6 +253,28 @@ export function insertPhoto(row, ctx = {}) {
   return saved;
 }
 
+/**
+ * 投稿直後の写真を公開する（サーバーの `POST /api/photos` の finalize に相当）。
+ * モックではサーバーの app_settings を `/api/config` の `autoApprovePhotos` として受け取り、
+ * 同じ判断をここで再現する。代表写真は自分の投稿の範囲でしか分からないので、
+ * このストアに承認済みの代表写真が無ければ代表にする（本物は decide_primary が決める）。
+ *
+ * @param {number|string} id
+ * @param {boolean} autoApprove `/api/config` の autoApprovePhotos
+ * @returns {'approved'|'pending'|string} 反映後の status
+ */
+export function finalizePhoto(id, autoApprove) {
+  const d = db();
+  const p = d.photos.find((x) => x.id === Number(id));
+  if (!p) throw new Error('写真が見つかりません');
+  if (p.status !== 'pending' || autoApprove !== true) return p.status;
+  p.status = 'approved';
+  const hasPrimary = d.photos.some((x) => x.livery_id === p.livery_id && x.is_primary && x.status === 'approved');
+  if (!hasPrimary) p.is_primary = true;
+  save(d);
+  return 'approved';
+}
+
 /** 自分が登録した塗装（新しい順） */
 export function listMyLiveries(userId) {
   return db().liveries

@@ -16,8 +16,10 @@ SQL Editor で、次の順にファイルの中身を貼り付けて実行する
 |---|---|---|
 | 1 | `supabase/migrations/0001_init.sql` | テーブル（profiles / liveries / photos / reports）、RLS、トリガー、初期 11 件の塗装データ |
 | 2 | `supabase/migrations/0002_storage.sql` | バケット `livery-photos`（public read・3MB・JPEG のみ）と Storage ポリシー |
+| 3 | `supabase/migrations/0003_settings.sql` | アプリ設定 `app_settings`（写真の自動承認。既定 ON）。**既に動かしている場合もこれだけ追加で実行する** |
 
-どちらも再実行しても壊れないように書いてある（`if not exists` / `drop policy if exists` / `on conflict`）。
+いずれも再実行しても壊れないように書いてある（`if not exists` / `drop policy if exists` / `on conflict`）。
+`0003` を実行していないと `/admin.html` の「設定」が読めず、写真の自動承認は働かない（＝全部が承認待ちになる）。
 
 ## 3. 認証プロバイダ
 
@@ -43,6 +45,10 @@ update public.profiles set role = 'admin'
 select p.id, p.display_name, p.role from public.profiles p where p.role = 'admin';
 ```
 
+**2 人目からは SQL を書かなくてよい**。`/admin.html` の「管理者」で表示名かメールアドレスで探して
+「管理者にする」／「管理者を外す」を押す（`POST /api/admin/role`）。自分自身は外せない・
+管理者が 0 人になる操作は断られるので、この SQL に戻る必要があるのは全員を失ったときだけ。
+
 ## 5. Vercel の環境変数
 
 Vercel → Project → Settings → Environment Variables に次を設定して再デプロイする。
@@ -63,6 +69,7 @@ Vercel → Project → Settings → Environment Variables に次を設定して�
 2. `/liveries.html` に初期 11 件が並ぶ
 3. `/api/status?icao=RJTT` の `special` に `liveryId` が入っている
 4. （フェーズ C 以降）`/admin.html` で承認待ちバッジが出る
+5. `/api/config` の `autoApprovePhotos` が `true`（= 0003 が入っている）
 
 ## バックアップ
 

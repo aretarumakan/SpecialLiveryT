@@ -20,7 +20,7 @@ test('GET /api/config: モックでは鍵を返さず no-store', async () => {
   const r = res();
   await config({ query: {} }, r);
   assert.equal(r.code, 200);
-  assert.deepEqual(r.body, { supabaseUrl: null, supabaseAnonKey: null, mock: true });
+  assert.deepEqual(r.body, { supabaseUrl: null, supabaseAnonKey: null, mock: true, autoApprovePhotos: true });
   assert.equal(r.headers['Cache-Control'], 'no-store');
 });
 

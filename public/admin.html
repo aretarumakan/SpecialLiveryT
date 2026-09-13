@@ -52,6 +52,8 @@
 
     <section class="card">
       <h3>承認待ちの写真 <span class="badge" id="cntPhotos">0</span></h3>
+      <div class="note" id="autoNote" hidden>写真の自動承認は <b>ON</b> です。新しい写真は投稿と同時に公開されるので、
+        ここに残るのは自動承認より前の投稿・通報で戻された写真・自動承認が失敗した写真だけです（下の「設定」で切り替えられます）。</div>
       <p class="s">その塗装にまだ代表写真が無ければ、最初に承認した写真が自動で代表写真になります。</p>
       <div id="photoList"><div class="s">読み込み中…</div></div>
     </section>
@@ -73,6 +75,42 @@
         <div class="out" id="primOut"></div>
       </div>
       <div id="primList"></div>
+    </section>
+
+    <section class="card">
+      <h3>設定</h3>
+      <div class="tool">
+        <div class="t">写真を自動で承認する</div>
+        <div class="s">ON にすると、投稿された写真はその場で公開されます（承認待ちを経由しません）。
+          不適切な写真は通報が 3 件たまると自動で承認待ちに戻ります。塗装の登録は設定に関わらず承認が必要です。</div>
+        <div class="row">
+          <label class="row" style="gap:8px">
+            <input type="checkbox" id="setAuto" style="width:20px;height:20px">
+            <span id="setAutoLabel">読み込み中…</span>
+          </label>
+        </div>
+        <div class="out" id="setOut"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>管理者</h3>
+      <p class="s">管理者はこの画面を開けて、承認・却下・通報の処理ができます。
+        自分自身を外すことはできません。管理者が 0 人になる操作も断られます。</p>
+      <div class="tool">
+        <div class="t">今の管理者</div>
+        <div id="adminList"><div class="s">読み込み中…</div></div>
+      </div>
+      <div class="tool">
+        <div class="t">ユーザーを探す</div>
+        <div class="s">表示名の一部か、メールアドレス（完全一致）で探します。メールは Supabase Auth に問い合わせます。</div>
+        <div class="row">
+          <input id="userQ" type="text" autocomplete="off" placeholder="表示名 または メールアドレス">
+          <button type="button" class="aw-btn primary" id="btnUserSearch">探す</button>
+        </div>
+        <div class="out" id="userOut"></div>
+      </div>
+      <div id="userList"></div>
     </section>
 
     <section class="card">
@@ -369,6 +407,130 @@
     });
   }
 
+  // --- 設定（写真の自動承認） -------------------------------------------------
+
+  var autoApprove = null;
+
+  function renderSetting() {
+    $('setAuto').checked = autoApprove === true;
+    $('setAutoLabel').textContent = autoApprove === true
+      ? 'ON（投稿された写真はすぐ公開されます）'
+      : 'OFF（写真は承認待ちになります）';
+    $('autoNote').hidden = autoApprove !== true;
+  }
+
+  function loadSettings() {
+    return api('/api/admin/settings').then(function (b) {
+      autoApprove = !!(b.settings && b.settings.auto_approve_photos);
+      renderSetting();
+    }, function (e) {
+      $('setOut').textContent = 'エラー: ' + e.message
+        + '（supabase/migrations/0003_settings.sql を実行しましたか？）';
+      throw e;
+    });
+  }
+
+  function saveSetting(value) {
+    $('setOut').textContent = '保存中…';
+    return api('/api/admin/settings', {
+      method: 'POST',
+      body: { key: 'auto_approve_photos', value: value }
+    }).then(function (b) {
+      autoApprove = !!(b.settings && b.settings.auto_approve_photos);
+      renderSetting();
+      $('setOut').textContent = '保存しました。';
+      AW.toast(autoApprove ? '写真の自動承認を ON にしました' : '写真の自動承認を OFF にしました');
+    }, function (e) {
+      $('setOut').textContent = 'エラー: ' + e.message;
+      renderSetting();                     // チェックを元に戻す
+      throw e;
+    });
+  }
+
+  // --- 管理者の追加・削除 -----------------------------------------------------
+
+  function renderAdmins(admins) {
+    if (!admins.length) { $('adminList').innerHTML = '<div class="s">管理者がいません。</div>'; return; }
+    $('adminList').innerHTML = '<div class="plist">' + admins.map(function (u) {
+      var isMe = session && session.user.id === u.id;
+      return row(
+        '<div class="ph">👤</div>'
+        + '<div class="t">' + esc(u.displayName || '(表示名なし)')
+          + ' <span class="badge gold">管理者</span>' + (isMe ? ' <span class="badge">自分</span>' : '') + '</div>'
+        + '<div class="s">' + esc(u.id) + '</div>'
+        + '<div class="act">' + (isMe
+            ? '<span class="s">自分自身は外せません</span>'
+            : '<button type="button" class="aw-btn danger" data-role="user" data-uid="' + esc(u.id)
+              + '" data-name="' + esc(u.displayName || u.id) + '">管理者を外す</button>') + '</div>'
+      );
+    }).join('') + '</div>';
+    wireRoleButtons($('adminList'));
+  }
+
+  function renderUsers(items) {
+    if (!items.length) { $('userList').innerHTML = ''; return; }
+    $('userList').innerHTML = '<div class="plist">' + items.map(function (u) {
+      var isAdmin = u.role === 'admin';
+      var isMe = session && session.user.id === u.id;
+      return row(
+        '<div class="ph">👤</div>'
+        + '<div class="t">' + esc(u.displayName || '(表示名なし)')
+          + (isAdmin ? ' <span class="badge gold">管理者</span>' : '') + '</div>'
+        + '<div class="s">' + esc(u.id) + (u.email ? '　' + esc(u.email) : '') + '</div>'
+        + '<div class="act">' + (isAdmin
+            ? (isMe ? '<span class="s">自分自身は外せません</span>'
+                    : '<button type="button" class="aw-btn danger" data-role="user" data-uid="' + esc(u.id)
+                      + '" data-name="' + esc(u.displayName || u.id) + '">管理者を外す</button>')
+            : '<button type="button" class="aw-btn primary" data-role="admin" data-uid="' + esc(u.id)
+              + '" data-name="' + esc(u.displayName || u.id) + '">管理者にする</button>') + '</div>'
+      );
+    }).join('') + '</div>';
+    wireRoleButtons($('userList'));
+  }
+
+  function wireRoleButtons(container) {
+    var btns = container.querySelectorAll('[data-role]');
+    for (var i = 0; i < btns.length; i++) {
+      (function (btn) {
+        btn.addEventListener('click', function () {
+          var toAdmin = btn.dataset.role === 'admin';
+          var name = btn.dataset.name;
+          var msg = toAdmin
+            ? '「' + name + '」を管理者にします。承認・却下・通報の処理ができるようになります。よろしいですか？'
+            : '「' + name + '」から管理者権限を外します。よろしいですか？';
+          if (!window.confirm(msg)) return;
+          busy(btn, function () {
+            return api('/api/admin/role', { method: 'POST', body: { userId: btn.dataset.uid, role: btn.dataset.role } })
+              .then(function (b) {
+                AW.toast(toAdmin ? '管理者にしました' : '管理者を外しました');
+                renderAdmins(b.admins || []);
+                return $('userQ').value.trim() ? searchUsers() : null;
+              });
+          });
+        });
+      })(btns[i]);
+    }
+  }
+
+  function loadAdmins() {
+    return api('/api/admin/users').then(function (b) { renderAdmins(b.admins || []); });
+  }
+
+  function searchUsers() {
+    var q = $('userQ').value.trim();
+    $('userList').innerHTML = '';
+    if (!q) { $('userOut').textContent = '表示名かメールアドレスを入れてください'; return Promise.resolve(); }
+    $('userOut').textContent = '検索中…';
+    return api('/api/admin/users?q=' + encodeURIComponent(q)).then(function (b) {
+      renderAdmins(b.admins || []);
+      var items = b.items || [];
+      $('userOut').textContent = items.length
+        ? items.length + ' 人が見つかりました'
+        : '該当するユーザーがいません（表示名は部分一致、メールは完全一致です）';
+      renderUsers(items);
+    }, function (e) { $('userOut').textContent = 'エラー: ' + e.message; throw e; });
+  }
+
   // --- ツール -----------------------------------------------------------------
 
   function runHexFill() {
@@ -416,14 +578,28 @@
       if (session.user.role !== 'admin') { $('denied').hidden = false; return null; }
       $('app').hidden = false;
 
-      $('btnReload').addEventListener('click', function () { busy($('btnReload'), load); });
+      $('btnReload').addEventListener('click', function () {
+        busy($('btnReload'), function () {
+          return Promise.all([load(), loadSettings().catch(function () {}), loadAdmins()]);
+        });
+      });
       $('btnPrimSearch').addEventListener('click', function () { busy($('btnPrimSearch'), searchPrimary); });
       $('primReg').addEventListener('keydown', function (ev) { if (ev.key === 'Enter') $('btnPrimSearch').click(); });
       $('btnHex').addEventListener('click', function () { busy($('btnHex'), runHexFill); });
       $('btnSweepDry').addEventListener('click', function () { busy($('btnSweepDry'), function () { return runSweep(true); }); });
       $('btnSweep').addEventListener('click', function () { busy($('btnSweep'), function () { return runSweep(false); }); });
       $('btnCredit').addEventListener('click', function () { busy($('btnCredit'), runCredit); });
-      return load();
+      $('btnUserSearch').addEventListener('click', function () { busy($('btnUserSearch'), searchUsers); });
+      $('userQ').addEventListener('keydown', function (ev) { if (ev.key === 'Enter') $('btnUserSearch').click(); });
+      $('setAuto').addEventListener('change', function () {
+        busy($('setAuto'), function () { return saveSetting($('setAuto').checked); });
+      });
+
+      return Promise.all([
+        load(),
+        loadSettings().catch(function () { /* 0003 未実行でも他は使えるようにする */ }),
+        loadAdmins().catch(fail)
+      ]);
     }).catch(fail);
   }
 

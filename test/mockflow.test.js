@@ -114,6 +114,29 @@ test('既存の塗装に写真を追加 → サムネイルが出る → 削除�
   assert.equal(db.imageUrl('user1/uuid-1_thumb.jpg'), null);                  // 画像も消える
 });
 
+test('モックの finalizePhoto: 自動承認 ON で公開・OFF なら承認待ちのまま', () => {
+  const session = db.signIn('user1');
+  const livery = { id: 7, reg: 'JA819A', name: 'ピカチュウジェット NH', status: 'approved' };
+
+  const off = submitPhoto(session, livery, { agree: true }, 'uuid-off');
+  assert.equal(db.finalizePhoto(off.id, false), 'pending');
+  assert.equal(db.listMyPhotos('user1')[0].status, 'pending');
+
+  const on = submitPhoto(session, livery, { agree: true }, 'uuid-on');
+  assert.equal(db.finalizePhoto(on.id, true), 'approved');
+  const saved = db.listMyPhotos('user1').find((p) => p.id === on.id);
+  assert.equal(saved.status, 'approved');
+  assert.equal(saved.is_primary, true);        // このストアに承認済みの代表が無いので代表になる
+
+  // 2 枚目の自動承認では代表を奪わない
+  const second = submitPhoto(session, livery, { agree: true }, 'uuid-on2');
+  assert.equal(db.finalizePhoto(second.id, true), 'approved');
+  assert.equal(db.listMyPhotos('user1').find((p) => p.id === second.id).is_primary, false);
+
+  assert.equal(db.finalizePhoto(on.id, true), 'approved');   // 二度呼んでも変わらない
+  assert.throws(() => db.finalizePhoto(9999, true), /見つかりません/);
+});
+
 test('新規登録と写真を同時に投稿する（/submit.html モード a）', () => {
   const session = db.signIn('user1');
   const livery = submitNewLivery(session, {

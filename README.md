@@ -19,7 +19,7 @@
 | `public/login.html` | ログイン（Google OAuth。モックではダミーユーザーの 2 ボタン）。初回は表示名の確認 |
 | `public/submit.html` | 投稿（(a) 新しい塗装を登録 / (b) 既存の塗装に写真を追加）。`public/js/upload.js` が処理 |
 | `public/me.html` | マイページ（自分の投稿と状態、写真の削除、表示名・SNS URL の編集） |
-| `public/admin.html` | 管理画面（admin のみ）。承認待ちの塗装・写真の承認／却下、通報、代表写真の差し替え、ツール |
+| `public/admin.html` | 管理画面（admin のみ）。承認待ちの塗装・写真の承認／却下、通報、代表写真の差し替え、設定（写真の自動承認）、管理者の追加／削除、ツール |
 | `public/terms.html` | 利用規約・写真の取り扱い（連絡先は `【連絡先を記入】` を置換する） |
 | `public/css/app.css` | 共通のデザイントークン（CSS 変数）と土台・ナビ・トーストのスタイル |
 | `public/js/common.js` | 共通ヘッダ／ナビ、`/api/config` 取得、supabase-js の遅延読み込み、`window.AW`（`getSession` / `requireLogin` / `signOut` / `authHeaders` / `report`）。admin には「管理」リンクと承認待ちバッジを出す |
@@ -27,13 +27,14 @@
 | `public/js/validate.js` | 入力検証の純関数（ブラウザと `node --test` で共用。登録記号・URL・日付・表示名） |
 | `public/js/mockdb.js` | モックモード用のクライアント側ストア（localStorage）。Supabase 無しで投稿の流れを試せる |
 | `api/status.js` | `GET /api/status?icao=RJTT`。`s-maxage=20` でエッジ共有 |
-| `api/config.js` | `GET /api/config` → `{ supabaseUrl, supabaseAnonKey, mock }`（`no-store`） |
+| `api/config.js` | `GET /api/config` → `{ supabaseUrl, supabaseAnonKey, mock, autoApprovePhotos }`（`no-store`） |
+| `api/photos.js` | `POST /api/photos`（ログイン必須）。`{op:'finalize', photoId}` = 投稿直後の自分の写真を公開処理に回す（自動承認が ON なら承認する） |
 | `api/liveries.js` | `GET /api/liveries?airline=&q=&active=1` → 承認済み一覧（`s-maxage=60`） |
 | `api/livery.js` | `GET /api/livery?reg=` → 共有ページ用（塗装・承認済み写真・**現在地**。`s-maxage=20`） |
 | `api/livery-page.js` | `GET /livery/:reg` の HTML（og:* をサーバーで埋める。vercel.json の rewrite 経由） |
 | `api/og.js` | `GET /api/og?reg=` → 1200×630 の OG 画像（Node Function・`@vercel/og` 0.6 系。1.x は Edge/Node とも Vercel で動かないため固定） |
 | `api/report.js` | `POST /api/report`（ログイン必須）。通報を登録。写真は未解決 3 件で自動的に承認待ちへ戻す |
-| `api/admin.js` + `lib/admin-api/*.js` | 管理 API（admin のみ）。`/api/admin/:op` を vercel.json の rewrite で 1 関数に集約（Hobby プランの 12 関数制限のため）。op = `approve` / `pending` / `primary` / `reports` / `hex-fill` / `sweep` / `credit-backfill` |
+| `api/admin.js` + `lib/admin-api/*.js` | 管理 API（admin のみ）。`/api/admin/:op` を vercel.json の rewrite で 1 関数に集約（Hobby プランの 12 関数制限のため）。op = `approve` / `pending` / `primary` / `reports` / `hex-fill` / `sweep` / `credit-backfill` / `users` / `role` / `settings` |
 | `lib/auth.js` | 呼び出し元の本人確認。`Bearer <JWT>` を Supabase Auth に検証させて `profiles.role` を見る（モックは `Bearer mock:<id>`） |
 | `lib/admin.js` | 管理バッチ（adsbdb で hex 補完・Storage の孤児ファイル掃除）。fetch を差し替えられる |
 | `lib/status.js` | 取得・判定ロジック（adsb.lol → adsb.fi フォールバック、adsbdb 経路、駐機/到着/出発の判定）。`lookupRoute()` を公開 |
@@ -42,7 +43,7 @@
 | `lib/db.js` | 塗装 DB のアクセス層。Supabase（PostgREST に素の fetch）とメモリ内モックを同じ関数で提供 |
 | `lib/airports.js` | 日本の主要 45 空港（ICAO/IATA/座標/空港とみなす半径） |
 | `lib/liveries.js` | 特別塗装機の初期データ・航空会社名・機種名の辞書 |
-| `supabase/migrations/` | Postgres スキーマ・RLS・Storage ポリシー・初期データ |
+| `supabase/migrations/` | Postgres スキーマ・RLS・Storage ポリシー・初期データ・アプリ設定（`0003_settings.sql`） |
 | `supabase/README.md` | 所有者が行う Supabase の設定手順（admin 昇格の SQL 1 行を含む） |
 | `test/dev-server.js` | 依存なしのローカルサーバー（`vercel dev` の代わり）。`public/` 配信 + `api/*.js` のマウント |
 | `test/*.test.js` | 単体テスト（`node --test test/`） |
@@ -140,7 +141,11 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 | `/api/admin/hex-fill` | POST | hex が空の塗装を adsbdb `/v0/aircraft/{reg}` の `mode_s` で補完（1 回 30 件まで） |
 | `/api/admin/sweep` | POST | Storage の孤児ファイル掃除（`{dryRun:true}` で一覧だけ。モックは何もしない） |
 | `/api/admin/credit-backfill` | POST | `{userId}` のクレジットを今の表示名に付け替える（改名の反映依頼用） |
+| `/api/admin/users` | GET | 管理者の一覧（`admins`）と `?q=` でのユーザー検索（表示名の部分一致・メールの完全一致） |
+| `/api/admin/role` | POST | `{userId, role:'admin'\|'user'}`。自分自身の降格と、管理者が 0 人になる降格は断る |
+| `/api/admin/settings` | GET / POST | アプリ設定（`app_settings`）の取得 / `{key, value}` の保存 |
 | `/api/report` | POST | ログイン済みの誰でも。`{targetType, targetId, reason}` |
+| `/api/photos` | POST | ログイン済みの誰でも。`{op:'finalize', photoId}`（自分の写真だけ。下の「写真の自動承認」） |
 
 - **認証**: ブラウザは `Authorization: Bearer <Supabase の access_token>` を付ける。`lib/auth.js` が
   `${SUPABASE_URL}/auth/v1/user`（anon キー）にトークンを検証させ、service role キーで `profiles.role` を読む。
@@ -154,6 +159,33 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 - **孤児掃除**: `photos.storage_path` / `thumb_path` と突き合わせて参照の無いファイルを消す。
   投稿中のファイルを巻き込まないよう、作成から 1 時間未満のファイルは対象外
 - 承認待ちの行は RLS では読めないため、管理 API だけは service role キーで読み書きする
+
+#### 管理者を増やす／外す
+
+`/admin.html` の「管理者」で、表示名（部分一致）かメールアドレス（完全一致）でユーザーを探して
+`profiles.role` を切り替える。**最初の 1 人だけ** `supabase/README.md` の SQL 1 行で昇格させる。
+
+- メールアドレスは `profiles` に持っていないので、`${SUPABASE_URL}/auth/v1/admin/users?email=` を
+  service role キーで引いてユーザー id を得る。メールは管理 API の応答にしか出さない
+- `profiles.role` の更新も service role キー。`0001_init.sql` の `profiles_guard_role` トリガーは
+  `auth.uid()` が NULL（= service role / SQL Editor）のときだけ role の変更を通す
+- **自分自身は外せない**（権限を失って戻せなくなる事故を防ぐ）。**管理者が 0 人になる降格も断る**
+
+#### 写真の自動承認（設定）
+
+`/admin.html` の「設定」の **「写真を自動で承認する」**（`app_settings.auto_approve_photos`・**既定 ON**）。
+塗装の登録は設定に関わらず常に承認待ち（＝手で確認する）で、自動承認されるのは**写真だけ**。
+
+- クライアントの insert は RLS（`photos_insert`）の都合で必ず `status='pending'` なので、
+  `public/js/upload.js` は insert の直後に `POST /api/photos`（`{op:'finalize', photoId}`）を呼ぶ。
+  サーバーは**投稿者本人の pending の写真**であることを確かめ、設定が ON なら管理者の承認と同じ道
+  （`adminUpdateStatus` → `decide_primary`）で承認する。承認者は「システム」なので `approved_by` は NULL
+- 投稿完了画面は結果に応じて **「公開されました」／「承認待ちです」** を出し分ける
+- 承認待ちの塗装に付いた写真は先に承認されうるが、一覧・共有ページの問い合わせは
+  いずれも `liveries.status = 'approved'` で絞っているので、**塗装が承認されるまで表示されない**
+- 設定が読めなかったときは承認しない（承認待ちのまま管理者に回る）
+- 通報の 3 件ルールは自動承認された写真にもそのまま効く（未解決 3 件で承認待ちに戻る）
+- モックモードでは `/api/config` の `autoApprovePhotos` を `public/js/mockdb.js` が同じように解釈する
 
 ### 共有ページ（フェーズ D）
 

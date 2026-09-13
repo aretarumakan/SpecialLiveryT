@@ -185,6 +185,37 @@ async function insertPhoto(photoRow, livery, images) {
   return data;
 }
 
+/**
+ * insert した写真を公開処理に回す（設定 `auto_approve_photos` が ON なら承認される）。
+ *
+ * クライアントの insert は RLS の都合で必ず `status='pending'` なので、
+ * 自動承認はサーバー（`POST /api/photos` の finalize）だけが行える。
+ * ここが失敗しても投稿自体は成立している（承認待ちとして管理者に見える）ので、
+ * 例外にはせず 'pending' を返す。
+ *
+ * @param {Object} photo insertPhoto の戻り（id を持つ）
+ * @returns {Promise<'approved'|'pending'>}
+ */
+async function finalizePhoto(photo) {
+  const id = photo && photo.id;
+  if (!id) return 'pending';
+  try {
+    if (isMock) return mockdb.finalizePhoto(id, AW.config.autoApprovePhotos === true);
+    const headers = AW.authHeaders(session);
+    headers['Content-Type'] = 'application/json';
+    const res = await fetch('/api/photos', {
+      method: 'POST', headers, cache: 'no-store',
+      body: JSON.stringify({ op: 'finalize', photoId: id }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+    return body.status === 'approved' ? 'approved' : 'pending';
+  } catch (e) {
+    console.warn('写真の公開処理に失敗しました（承認待ちとして残ります）', e);
+    return 'pending';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 既存塗装の照会と adsbdb
 // ---------------------------------------------------------------------------
@@ -465,16 +496,20 @@ async function submitNew() {
     if (hasFile) images = await buildImages(files.n);   // 画像の失敗で行を作らないよう先に作る
     const livery = await insertLivery(live.row);
     let photoOk = true;
+    let photoStatus = null;
     if (images) {
       try {
-        await insertPhoto(photo.row, { id: livery.id, reg: live.row.reg, name: live.row.name }, images);
+        const saved = await insertPhoto(photo.row, { id: livery.id, reg: live.row.reg, name: live.row.name }, images);
+        photoStatus = await finalizePhoto(saved);
       } catch (e) {
         photoOk = false;
         AW.toast('塗装は登録できましたが写真の投稿に失敗しました: ' + e.message);
       }
     }
+    // 塗装そのものは必ず管理者の承認待ち（自動承認は写真だけ）
     done('承認待ちです', photoOk
       ? '「' + live.row.name + '」（' + live.row.reg + '）を受け付けました。管理者の承認後に一覧と空港ウォッチに出ます。'
+        + (photoStatus === 'approved' ? '写真は公開済みで、塗装が承認されると一緒に表示されます。' : '')
       : '塗装の登録だけ受け付けました。写真はマイページから投稿し直してください。');
   } catch (e) {
     fatal(section, e.message || String(e));
@@ -498,9 +533,16 @@ async function submitPhoto() {
   btn.textContent = '送信中…';
   try {
     const images = await buildImages(files.p);
-    await insertPhoto(photo.row, selectedLivery, images);
-    done('承認待ちです', '「' + selectedLivery.name + '」（' + selectedLivery.reg
-      + '）への写真を受け付けました。承認されると代表写真に選ばれることがあります。');
+    const saved = await insertPhoto(photo.row, selectedLivery, images);
+    const status = await finalizePhoto(saved);
+    if (status === 'approved') {
+      done('公開されました', '「' + selectedLivery.name + '」（' + selectedLivery.reg
+        + '）への写真を公開しました。その塗装にまだ代表写真が無ければ、この写真が代表写真になります。'
+        + '（不適切な写真は通報で取り下げられます）');
+    } else {
+      done('承認待ちです', '「' + selectedLivery.name + '」（' + selectedLivery.reg
+        + '）への写真を受け付けました。承認されると代表写真に選ばれることがあります。');
+    }
   } catch (e) {
     fatal(section, e.message || String(e));
     btn.disabled = false;

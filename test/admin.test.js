@@ -6,6 +6,8 @@
  *  - /api/report の 3 件ルール
  *  - /api/admin/pending, primary, reports, hex-fill, sweep, credit-backfill
  *  - hex 補完の応答の解釈（fetch を差し替えて外に出さない）
+ *  - /api/admin/users・/api/admin/role（管理者の増減）
+ *  - /api/admin/settings と /api/photos の finalize（写真の自動承認）
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,7 +26,13 @@ const reports = (await import('../lib/admin-api/reports.js')).default;
 const hexFill = (await import('../lib/admin-api/hex-fill.js')).default;
 const sweep = (await import('../lib/admin-api/sweep.js')).default;
 const creditBackfill = (await import('../lib/admin-api/credit-backfill.js')).default;
+const users = (await import('../lib/admin-api/users.js')).default;
+const role = (await import('../lib/admin-api/role.js')).default;
+const settings = (await import('../lib/admin-api/settings.js')).default;
 const report = (await import('../api/report.js')).default;
+const photos = (await import('../api/photos.js')).default;
+const adminOps = (await import('../api/admin.js')).default;
+const config = (await import('../api/config.js')).default;
 
 // ---------------------------------------------------------------------------
 // 小道具
@@ -90,6 +98,9 @@ test('管理 API は未ログインで 401、一般ユーザーで 403', async (
     ['hex-fill', hexFill, { method: 'POST', body: {} }],
     ['sweep', sweep, { method: 'POST', body: {} }],
     ['credit-backfill', creditBackfill, { method: 'POST', body: { userId: 'user1' } }],
+    ['users', users, {}],
+    ['role', role, { method: 'POST', body: { userId: 'user1', role: 'admin' } }],
+    ['settings', settings, {}],
   ];
   for (const [name, handler, opt] of handlers) {
     const anon = await call(handler, opt);
@@ -434,6 +445,202 @@ test('parsePositiveId / cleanReason / parseUserId / parseReg / parseHex', () => 
 
   assert.equal(db.parseHex('86D310'), '86d310');
   assert.throws(() => db.parseHex('86d31'), /が不正です/);
+});
+
+// ---------------------------------------------------------------------------
+// 管理者を増やす／外す（/api/admin/users, /api/admin/role）
+// ---------------------------------------------------------------------------
+
+test('GET /api/admin/users: 管理者一覧・表示名の部分一致・メールの完全一致', async () => {
+  const empty = await call(users, { as: 'mock:admin' });
+  assert.equal(empty.code, 200);
+  assert.deepEqual(empty.body.admins.map((u) => u.id), ['admin']);
+  assert.equal(empty.body.admins[0].displayName, 'モック管理者');
+  assert.deepEqual(empty.body.items, []);                       // q が無ければ検索しない
+
+  const byName = await call(users, { as: 'mock:admin', query: { q: '一般' } });
+  assert.equal(byName.body.count, 1);
+  assert.equal(byName.body.items[0].id, 'user1');
+  assert.equal(byName.body.items[0].role, 'user');
+  assert.equal(byName.body.items[0].email, undefined);          // 表示名検索ではメールを出さない
+
+  const byMail = await call(users, { as: 'mock:admin', query: { q: 'USER1@example.com' } });
+  assert.equal(byMail.body.count, 1);
+  assert.equal(byMail.body.items[0].id, 'user1');
+  assert.equal(byMail.body.items[0].email, 'user1@example.com');
+
+  const none = await call(users, { as: 'mock:admin', query: { q: 'だれもいない' } });
+  assert.equal(none.body.count, 0);
+
+  const post = await call(users, { as: 'mock:admin', method: 'POST', body: {} });
+  assert.equal(post.code, 405);
+});
+
+test('POST /api/admin/role: 管理者にする／外す', async () => {
+  const up = await call(role, { as: 'mock:admin', method: 'POST', body: { userId: 'user1', role: 'admin' } });
+  assert.equal(up.code, 200);
+  assert.equal(up.body.role, 'admin');
+  assert.equal(up.body.changed, true);
+  assert.deepEqual(up.body.admins.map((u) => u.id).sort(), ['admin', 'user1']);
+  assert.equal((await db.getProfileById('user1')).role, 'admin');
+
+  // 同じ role をもう一度送っても壊れない
+  const again = await call(role, { as: 'mock:admin', method: 'POST', body: { userId: 'user1', role: 'admin' } });
+  assert.equal(again.body.changed, false);
+
+  // user1（管理者になった）から admin を外せる（管理者は 2 人いるので通る）
+  const down = await call(role, { as: 'mock:user1', method: 'POST', body: { userId: 'admin', role: 'user' } });
+  assert.equal(down.code, 200);
+  assert.deepEqual(down.body.admins.map((u) => u.id), ['user1']);
+});
+
+test('POST /api/admin/role: 自分自身の降格と最後の管理者は断る', async () => {
+  const self = await call(role, { as: 'mock:admin', method: 'POST', body: { userId: 'admin', role: 'user' } });
+  assert.equal(self.code, 400);
+  assert.match(self.body.error, /自分自身/);
+  assert.equal((await db.getProfileById('admin')).role, 'admin');
+
+  // 管理者が 1 人のときの降格（API では自分自身の判定に先に当たるので lib を直接叩く）
+  await assert.rejects(() => db.setProfileRole('admin', 'user'), /0 人になる/);
+  assert.equal((await db.getProfileById('admin')).role, 'admin');
+
+  const badRole = await call(role, { as: 'mock:admin', method: 'POST', body: { userId: 'user1', role: 'owner' } });
+  assert.equal(badRole.code, 400);
+  assert.match(badRole.body.error, /role が不正/);
+
+  const badUser = await call(role, { as: 'mock:admin', method: 'POST', body: { userId: 'a b', role: 'admin' } });
+  assert.equal(badUser.code, 400);
+
+  const get = await call(role, { as: 'mock:admin' });
+  assert.equal(get.code, 405);
+});
+
+// ---------------------------------------------------------------------------
+// 設定（/api/admin/settings）と写真の自動承認（/api/photos）
+// ---------------------------------------------------------------------------
+
+test('/api/admin/settings: 既定は自動承認 ON。保存して読み直せる', async () => {
+  const before = await call(settings, { as: 'mock:admin' });
+  assert.equal(before.code, 200);
+  assert.equal(before.body.settings.auto_approve_photos, true);
+  assert.equal(before.body.defaults.auto_approve_photos, true);
+
+  const off = await call(settings, { as: 'mock:admin', method: 'POST', body: { key: 'auto_approve_photos', value: false } });
+  assert.equal(off.code, 200);
+  assert.equal(off.body.settings.auto_approve_photos, false);
+  assert.equal(await db.getSetting('auto_approve_photos', true), false);
+
+  const after = await call(settings, { as: 'mock:admin' });
+  assert.equal(after.body.settings.auto_approve_photos, false);
+
+  // まとめて送る形も受ける
+  const on = await call(settings, { as: 'mock:admin', method: 'POST', body: { settings: { auto_approve_photos: 'true' } } });
+  assert.equal(on.body.settings.auto_approve_photos, true);
+
+  const badKey = await call(settings, { as: 'mock:admin', method: 'POST', body: { key: 'drop_table', value: true } });
+  assert.equal(badKey.code, 400);
+  assert.match(badKey.body.error, /設定キーが不正/);
+
+  const badValue = await call(settings, { as: 'mock:admin', method: 'POST', body: { key: 'auto_approve_photos', value: 'maybe' } });
+  assert.equal(badValue.code, 400);
+
+  const empty = await call(settings, { as: 'mock:admin', method: 'POST', body: {} });
+  assert.equal(empty.code, 400);
+
+  const put = await call(settings, { as: 'mock:admin', method: 'PUT', body: {} });
+  assert.equal(put.code, 405);
+});
+
+test('GET /api/config: autoApprovePhotos を配る（モックのクライアントが同じ判断をするため）', async () => {
+  const on = await call(config, {});
+  assert.equal(on.body.mock, true);
+  assert.equal(on.body.autoApprovePhotos, true);
+
+  await db.setSetting('auto_approve_photos', false);
+  const off = await call(config, {});
+  assert.equal(off.body.autoApprovePhotos, false);
+});
+
+test('POST /api/photos finalize: 自動承認 ON なら公開され、代表写真になる', async () => {
+  const l = db.mock.addLivery({ reg: 'JA809A', name: '自動承認テスト', status: 'approved' });
+  const p = db.mock.addPhoto({ livery_id: l.id, user_id: 'user1', credit_name: '投稿者' });
+  assert.equal(p.status, 'pending');
+
+  const r = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'finalize', photoId: p.id } });
+  assert.equal(r.code, 200);
+  assert.deepEqual(r.body, { status: 'approved', autoApprove: true, primaryPhotoId: p.id });
+
+  const row = db.mock.store().photos.find((x) => x.id === p.id);
+  assert.equal(row.status, 'approved');
+  assert.equal(row.is_primary, true);
+  assert.equal((await db.getLiveryByReg('JA809A')).credit, '投稿者');
+
+  // もう一度呼んでも承認済みのまま（再送に耐える）
+  const again = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'finalize', photoId: p.id } });
+  assert.equal(again.body.status, 'approved');
+  assert.equal(again.body.autoApprove, false);
+});
+
+test('POST /api/photos finalize: 自動承認 OFF なら承認待ちのまま', async () => {
+  await db.setSetting('auto_approve_photos', false);
+  const l = db.mock.addLivery({ reg: 'JA810A', name: '手動承認テスト', status: 'approved' });
+  const p = db.mock.addPhoto({ livery_id: l.id, user_id: 'user1', credit_name: '投稿者' });
+
+  const r = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'finalize', photoId: p.id } });
+  assert.equal(r.code, 200);
+  assert.deepEqual(r.body, { status: 'pending', autoApprove: false });
+  assert.equal(db.mock.store().photos.find((x) => x.id === p.id).status, 'pending');
+  assert.equal(db.mock.store().photos.find((x) => x.id === p.id).is_primary, false);
+});
+
+test('POST /api/photos finalize: 他人の写真・未ログイン・不正な op は通さない', async () => {
+  const l = db.mock.addLivery({ reg: 'JA811A', name: '他人テスト', status: 'approved' });
+  const mine = db.mock.addPhoto({ livery_id: l.id, user_id: 'admin', credit_name: '管理者の写真' });
+
+  const anon = await call(photos, { method: 'POST', body: { op: 'finalize', photoId: mine.id } });
+  assert.equal(anon.code, 401);
+
+  const other = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'finalize', photoId: mine.id } });
+  assert.equal(other.code, 404);
+  assert.equal(db.mock.store().photos.find((x) => x.id === mine.id).status, 'pending');
+
+  const missing = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'finalize', photoId: 99999 } });
+  assert.equal(missing.code, 404);
+
+  const badId = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'finalize', photoId: '1; drop' } });
+  assert.equal(badId.code, 400);
+
+  const badOp = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'delete', photoId: mine.id } });
+  assert.equal(badOp.code, 400);
+
+  const get = await call(photos, { as: 'mock:user1' });
+  assert.equal(get.code, 405);
+});
+
+test('自動承認された写真も通報 3 件で承認待ちに戻る', async () => {
+  const l = db.mock.addLivery({ reg: 'JA812A', name: '通報と自動承認', status: 'approved' });
+  const p = db.mock.addPhoto({ livery_id: l.id, user_id: 'user1', credit_name: '自動承認された人' });
+  await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'finalize', photoId: p.id } });
+  assert.equal(db.mock.store().photos.find((x) => x.id === p.id).status, 'approved');
+
+  for (let i = 1; i <= 3; i += 1) {
+    await call(report, { as: 'mock:user1', method: 'POST', body: { targetType: 'photo', targetId: p.id, reason: `通報 ${i}` } });
+  }
+  const row = db.mock.store().photos.find((x) => x.id === p.id);
+  assert.equal(row.status, 'pending');
+  assert.equal(row.is_primary, false);
+});
+
+test('/api/admin/:op の振り分けに users / role / settings が入っている', async () => {
+  const r = await call(adminOps, { as: 'mock:admin', query: { op: 'users' } });
+  assert.equal(r.code, 200);
+  assert.deepEqual(r.body.admins.map((u) => u.id), ['admin']);
+
+  const s = await call(adminOps, { as: 'mock:admin', query: { op: 'settings' } });
+  assert.equal(s.body.settings.auto_approve_photos, true);
+
+  const unknown = await call(adminOps, { as: 'mock:admin', query: { op: 'nope' } });
+  assert.equal(unknown.code, 404);
 });
 
 test('MOCK_SEED_PENDING=1 で管理画面用のダミーが入る', async () => {
