@@ -44,7 +44,7 @@
 | `lib/db.js` | 塗装機 DB のアクセス層。Supabase（PostgREST に素の fetch）とメモリ内モックを同じ関数で提供 |
 | `lib/airports.js` | 日本の主要 45 空港（ICAO/IATA/座標/空港とみなす半径） |
 | `lib/liveries.js` | 特別塗装機の初期データ・航空会社名・機種名の辞書 |
-| `supabase/migrations/` | Postgres スキーマ・RLS・Storage ポリシー・初期データ・アプリ設定（`0003_settings.sql`）・セキュリティ強化（`0004_hardening.sql`） |
+| `supabase/migrations/` | Postgres スキーマ・RLS・Storage ポリシー・初期データ・アプリ設定（`0003_settings.sql`）・セキュリティ強化（`0004_hardening.sql`）・クレジット追随と写真削除（`0005_credit_and_delete.sql`） |
 | `supabase/README.md` | 所有者が行う Supabase の設定手順（admin 昇格の SQL 1 行を含む） |
 | `test/dev-server.js` | 依存なしのローカルサーバー（`vercel dev` の代わり）。`public/` 配信 + `api/*.js` のマウント |
 | `test/*.test.js` | 単体テスト（`node --test test/`） |
@@ -156,7 +156,8 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 - `photos` の行は**両方の upload が成功してから** insert する。insert が失敗した場合は上げた画像を消すが、
   ネットワークが切れた場合などは孤児ファイルが残りうる。これは `/admin.html` の
   「孤児ファイルの掃除」（`POST /api/admin/sweep`）で回収する（フェーズ C で実装）
-- `credit_name` は**投稿時点の表示名で固定**する。あとでマイページで改名しても過去の写真のクレジットは変わらない
+- `credit_name` は**プロフィールの表示名に追随**する。マイページで改名すると `profiles_sync_credit`
+  トリガー（`0005_credit_and_delete.sql`）が過去の写真の `credit_name` も書き換える
   （`/me.html` と `/terms.html` にその旨を明記している）
 - 登録記号を入れて欄から離れると、`/api/liveries?q=` で既存の承認済み塗装機を照会し（あれば
   「この塗装機に写真を追加」へ誘導）、`https://api.adsbdb.com/v0/aircraft/{reg}` をブラウザから直接引いて
@@ -175,12 +176,12 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 | `/api/admin/reports` | GET / POST | 通報の一覧 / `{id}` を解決済みにする |
 | `/api/admin/hex-fill` | POST | hex が空の塗装機を adsbdb `/v0/aircraft/{reg}` の `mode_s` で補完（1 回 30 件まで） |
 | `/api/admin/sweep` | POST | Storage の孤児ファイル掃除（`{dryRun:true}` で一覧だけ。モックは何もしない） |
-| `/api/admin/credit-backfill` | POST | `{userId}` のクレジットを今の表示名に付け替える（改名の反映依頼用） |
+| `/api/admin/credit-backfill` | POST | `{userId}` のクレジットを今の表示名に付け替える（改名は自動反映になったので**修復用**） |
 | `/api/admin/users` | GET | 管理者の一覧（`admins`）と `?q=` でのユーザー検索（表示名の部分一致・メールの完全一致） |
 | `/api/admin/role` | POST | `{userId, role:'admin'\|'user'}`。自分自身の降格と、管理者が 0 人になる降格は断る |
 | `/api/admin/settings` | GET / POST | アプリ設定（`app_settings`）の取得 / `{key, value}` の保存 |
 | `/api/report` | POST | ログイン済みの誰でも。`{targetType, targetId, reason}` |
-| `/api/photos` | POST | ログイン済みの誰でも。`{op:'finalize', photoId}`（自分の写真だけ。下の「写真の自動承認」） |
+| `/api/photos` | POST | ログイン済みの誰でも。`{op:'finalize', photoId}`（自分の写真だけ。下の「写真の自動承認」）／`{op:'delete', photoId}` は**モック専用**（本物はブラウザから Storage → 行の順に直接消す） |
 
 - **認証**: ブラウザは `Authorization: Bearer <Supabase の access_token>` を付ける。`lib/auth.js` が
   `${SUPABASE_URL}/auth/v1/user`（anon キー）にトークンを検証させ、service role キーで `profiles.role` を読む。
@@ -226,7 +227,8 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 
 `/livery/:reg` は塗装機 1 件ぶんの共有ページ。SNS のクローラは JS を実行しないので、
 `<head>` の `og:*` と本文は **`api/livery-page.js` がサーバー側で描く**。
-ブラウザ側の JS は「今どこ？」のポーリング・タブ切り替え・共有ボタン・通報だけを担当する。
+ブラウザ側の JS は「今どこ？」のポーリング・タブ切り替え・共有ボタン・通報と、
+**自分が投稿した写真の削除**だけを担当する。
 
 | 部品 | 内容 |
 |---|---|
@@ -236,6 +238,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 | 本文 | 大きな代表写真（撮影者名・SNS リンク）／塗装機情報・出典／今どこ？／ギャラリー（2 枚以上のとき）／共有・投稿・通報 |
 | 未登録の登録記号 | **404** を返し「この機体の塗装機を登録する」（`/submit.html?reg=`）へ誘導 |
 | 複数の塗装機 | 同じ登録記号に複数あればタブ表示（運航中 → 新しい順） |
+| 自分の写真の削除 | ログイン中のユーザー id と写真の `userId` が同じときだけ「この写真を削除」を出す（代表写真にもギャラリーにも）。削除は `/me.html` と同じで Storage → `photos` の行の順。消したあとは `/api/livery` を `cache:'no-store'` で取り直して描き直す（`s-maxage=20` のエッジキャッシュを避けるため）。モックだけは共有ページの写真がサーバー側ストアにあるので `POST /api/photos {op:'delete'}` を使う |
 
 **今どこ？**（`GET /api/livery?reg=` の `position`。`lib/position.js`）
 

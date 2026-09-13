@@ -18,6 +18,7 @@ SQL Editor で、次の順にファイルの中身を貼り付けて実行する
 | 2 | `supabase/migrations/0002_storage.sql` | バケット `livery-photos`（public read・3MB・JPEG のみ）と Storage ポリシー |
 | 3 | `supabase/migrations/0003_settings.sql` | アプリ設定 `app_settings`（写真の自動承認。既定 ON）。**既に動かしている場合もこれだけ追加で実行する** |
 | 4 | `supabase/migrations/0004_hardening.sql` | セキュリティ強化（写真パスの検証・通報の重複防止・投稿の 1 日上限・バケットの一覧を閉じる）。**0003 の後に実行する**。事前確認は下の「7.」 |
+| 5 | `supabase/migrations/0005_credit_and_delete.sql` | 表示名を変えたら過去の写真のクレジットも追随（`profiles_sync_credit` + 一度きりの遡り反映）、代表写真を消したときの代表決め直し（`photos_after_delete`）。**0004 の後に実行する**。確認は下の「8.」 |
 
 いずれも再実行しても壊れないように書いてある（`if not exists` / `drop policy if exists` / `on conflict`）。
 `0003` を実行していないと `/admin.html` の「設定」が読めず、写真の自動承認は働かない（＝全部が承認待ちになる）。
@@ -156,6 +157,34 @@ select target_type, target_id, reporter_id, count(*)
 4. `/admin.html` の承認・却下・代表写真の差し替えが動く
 5. `/api/admin/sweep`（孤児掃除）が今までどおり一覧を取れる（service role なので影響しない）
 6. `curl -I https://special-livery-t.vercel.app/` に `X-Frame-Options: DENY` などが付いている
+
+## 8. 0005_credit_and_delete.sql の確認
+
+`0005` も**稼働中の DB** に当てる。事前の片付けは要らない（既存行のクレジットを今の表示名に揃える
+`update` が 1 回走るだけ。差分がある行しか触らないので再実行しても 0 行で終わる）。
+
+実行後、次の 2 つがどちらも **0 行**であれば入っている。
+
+```sql
+-- クレジットが表示名とずれている写真（0 行であること）
+select p.id, p.credit_name, pr.display_name
+  from public.photos p join public.profiles pr on pr.id = p.user_id
+ where p.credit_name is distinct from pr.display_name;
+
+-- 承認済み写真があるのに代表写真が居ない塗装機（0 行であること）
+select l.id, l.reg from public.liveries l
+ where l.status = 'approved'
+   and exists (select 1 from public.photos where livery_id = l.id and status = 'approved')
+   and not exists (select 1 from public.photos where livery_id = l.id and is_primary);
+```
+
+画面での確認:
+
+1. `/me.html` で表示名を変える → `/livery/<登録記号>` のクレジットが新しい名前になっている
+2. `/livery/<登録記号>` を**自分が投稿した写真がある機体**で開く → 自分の写真にだけ
+   「この写真を削除」が出る（他人の写真には出ない）
+3. 代表写真を削除する → 次に古い承認済みの写真が代表になり、ページがその写真で描き直される
+4. `/admin.html` の「クレジットの再反映」は**修復用**として残っている（通常は使わない）
 
 ## バックアップ
 

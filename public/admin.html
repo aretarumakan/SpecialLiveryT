@@ -136,7 +136,8 @@
 
       <div class="tool">
         <div class="t">クレジットの再反映</div>
-        <div class="s">クレジットは投稿時点の表示名で固定しています。本人から改名の反映依頼があったときだけ、
+        <div class="s">表示名を変えると写真のクレジットは自動で追随します（0005_credit_and_delete.sql）。
+          これは<b>修復用</b>です。何かの理由でクレジットがずれているときだけ、
           そのユーザー id を入れて実行してください（過去の写真すべてが今の表示名になります）。</div>
         <div class="row">
           <input id="creditUser" type="text" autocomplete="off" placeholder="ユーザー id（UUID）">

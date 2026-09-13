@@ -238,3 +238,83 @@ test('api/og.js: Node ランタイムで、lib/status.js を読み込んでい�
   assert.match(src, /from '@vercel\/og'/);
   assert.ok(!/from '\.\.\/lib\/status\.js'/.test(src));
 });
+
+// ---------------------------------------------------------------------------
+// 自分の写真の削除（共有ページ）
+// ---------------------------------------------------------------------------
+
+test('GET /livery/:reg: 写真に data-photo-id / data-user-id が付く（本人判定に使う）', async () => {
+  db.mock.reset();
+  const mine = seedPhoto({ created_at: '2020-01-01T00:00:00.000Z' });
+  const other = seedPhoto({ user_id: 'user2', credit_name: '別の人', created_at: '2021-01-01T00:00:00.000Z' });
+  const r = res();
+  await handler(req('JA819A'), r);
+  assert.equal(r.code, 200);
+  const html = r.body;
+
+  // 代表写真（hero）とギャラリーの両方に、その写真の id と投稿者が入る
+  assert.match(html, new RegExp(`<div class="hero" data-lv="\\d+" data-photo-id="${mine.id}" data-user-id="user1"`));
+  assert.match(html, new RegExp(`<div class="gi" data-photo-id="${other.id}" data-user-id="user2"`));
+  // ギャラリーのマスは a ではなく div（削除ボタンを a の中に入れないため）
+  assert.ok(!/<a class="gi"/.test(html));
+  // 削除ボタン自体はサーバーでは描かない（ログイン状態はブラウザ側でしか分からない）
+  assert.ok(!html.includes('delbtn"'));
+  assert.match(html, /この写真を削除します。元に戻せません。/);
+});
+
+test('GET /livery/:reg: 写真が 1 枚でもギャラリーの入れ物は出す（削除後の描き直し先）', async () => {
+  db.mock.reset();
+  seedPhoto();
+  const r = res();
+  await handler(req('JA819A'), r);
+  // 入れ物だけで中身は空（見出しもマスも出さない）
+  assert.match(r.body, /<div class="gal" data-lv="\d+">\s*<\/div>/);
+});
+
+test('ブラウザ側のスクリプトが構文として正しい（node --check 相当）', async () => {
+  const vm = await import('node:vm');
+  db.mock.reset();
+  seedPhoto();
+  const r = res();
+  await handler(req('JA819A'), r);
+  const m = r.body.match(/<script>\n([\s\S]*?)\n<\/script>/);
+  assert.ok(m, 'インラインスクリプトが見つからない');
+  assert.doesNotThrow(() => new vm.Script(m[1], { filename: 'livery-page-inline.js' }));
+  // `</script>` で本文を壊さない
+  assert.ok(!m[1].includes('</script>'));
+});
+
+test('GET /api/livery: 写真に userId / storagePath / thumbPath を返し、メールは返さない', async () => {
+  db.mock.reset();
+  position.clearPositionCache();
+  const p = seedPhoto();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('offline'); };
+  try {
+    const r = res();
+    await liveryApi({ query: { reg: 'JA819A' } }, r);
+    assert.equal(r.code, 200);
+    assert.equal(r.body.photos[0].userId, 'user1');
+    assert.equal(r.body.photos[0].storagePath, p.storage_path);
+    assert.equal(r.body.photos[0].thumbPath, p.thumb_path);
+    const json = JSON.stringify(r.body);
+    assert.equal(json.includes('@example.com'), false);
+    assert.equal(json.includes('"role"'), false);
+  } finally {
+    globalThis.fetch = realFetch;
+    position.clearPositionCache();
+  }
+});
+
+test('0005_credit_and_delete.sql: クレジット追随と代表写真の決め直しが入っている', async () => {
+  const sql = await readFile(new URL('../supabase/migrations/0005_credit_and_delete.sql', import.meta.url), 'utf8');
+  assert.match(sql, /create trigger profiles_sync_credit_trg\s+after update of display_name on public\.profiles/);
+  assert.match(sql, /update public\.photos\s+set credit_name = new\.display_name\s+where user_id = new\.id/);
+  assert.match(sql, /create trigger photos_after_delete_trg\s+after delete on public\.photos/);
+  assert.match(sql, /exists \(select 1 from public\.liveries where id = old\.livery_id\)/);
+  // 一度きりの遡り反映
+  assert.match(sql, /update public\.photos p\s+set credit_name = pr\.display_name/);
+  // 冪等（何度実行しても壊れない）
+  assert.match(sql, /drop trigger if exists profiles_sync_credit_trg/);
+  assert.match(sql, /drop trigger if exists photos_after_delete_trg/);
+});

@@ -138,13 +138,23 @@ export function getSession() {
   };
 }
 
-/** profiles の更新（display_name / sns_url のみ。role は触らない） */
+/**
+ * profiles の更新（display_name / sns_url のみ。role は触らない）。
+ * 表示名を変えたら、0005_credit_and_delete.sql の profiles_sync_credit と同じく
+ * その人の写真の credit_name も書き換える（過去の写真のクレジットも追随する）。
+ */
 export function updateProfile(id, patch = {}) {
   const d = db();
   const p = d.profiles[id] || { id, display_name: id, sns_url: null, role: 'user' };
+  const before = p.display_name;
   if (patch.display_name !== undefined) p.display_name = patch.display_name;
   if (patch.sns_url !== undefined) p.sns_url = patch.sns_url;
   d.profiles[id] = p;
+  if (p.display_name !== before) {
+    for (const photo of d.photos) {
+      if (photo.user_id === id) photo.credit_name = p.display_name;
+    }
+  }
   save(d);
   return p;
 }
@@ -296,8 +306,25 @@ export function deletePhoto(userId, id) {
   const i = d.photos.findIndex((p) => p.id === Number(id) && p.user_id === userId);
   if (i < 0) throw new Error('写真が見つかりません');
   const [row] = d.photos.splice(i, 1);
+  // 代表写真を消したら次の代表を決め直す（0005 の photos_after_delete と同じ規則）
+  if (row.is_primary) decidePrimary(d, row.livery_id);
   save(d);
   removeImage(row.storage_path);
   removeImage(row.thumb_path);
   return row;
+}
+
+/**
+ * SQL の decide_primary() と同じ規則。承認済みでない代表を降ろし、
+ * 代表が居なければ承認済みで最も古い写真を代表にする。
+ * @param {Object} d db() が返したストア（呼び出し側が save する）
+ * @param {number} liveryId
+ */
+function decidePrimary(d, liveryId) {
+  const mine = d.photos.filter((p) => p.livery_id === Number(liveryId));
+  for (const p of mine) if (p.is_primary && p.status !== 'approved') p.is_primary = false;
+  if (mine.some((p) => p.is_primary)) return;
+  const next = mine.filter((p) => p.status === 'approved')
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || a.id - b.id)[0];
+  if (next) next.is_primary = true;
 }

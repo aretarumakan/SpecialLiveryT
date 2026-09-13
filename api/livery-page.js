@@ -9,6 +9,7 @@
  *   - 「今どこ？」の 30 秒ポーリング（/api/livery）
  *   - 塗装機が複数あるときのタブ切り替え
  *   - 共有ボタンの URL 組み立て・リンクのコピー・通報
+ *   - 投稿者本人にだけ出す「この写真を削除」（削除後は /api/livery を取り直して描き直す）
  * だけを担当する。
  *
  * 登録記号は URL から来るため、埋め込む値はすべて escapeHtml / JSON で逃がす。
@@ -162,7 +163,7 @@ function sendNotFound(res, reg, origin, why) {
 
 function heroHtml(lv, photo) {
   if (!photo) {
-    return `<div class="hero none">
+    return `<div class="hero none" data-lv="${lv.id}">
       <span class="ph">✈</span>
       <div class="cap">この塗装機の写真はまだありません。<br>
         <a class="aw-btn gold" href="/submit.html?reg=${encodeURIComponent(lv.reg)}">あなたの写真を載せませんか</a></div>
@@ -172,7 +173,7 @@ function heroHtml(lv, photo) {
     ? `<a href="${escapeHtml(photo.snsUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(photo.credit)}</a>`
     : escapeHtml(photo.credit);
   const where = [photo.takenOn ? String(photo.takenOn).replace(/-/g, '/') : '', airportLabel(photo.airport)].filter(Boolean).join('・');
-  return `<div class="hero">
+  return `<div class="hero" data-lv="${lv.id}" data-photo-id="${photo.id}" data-user-id="${escapeHtml(photo.userId || '')}">
     <a href="${escapeHtml(photo.url)}" target="_blank" rel="noopener">
       <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(lv.name)}（${escapeHtml(lv.reg)}）" loading="eager">
     </a>
@@ -198,15 +199,21 @@ function infoHtml(lv) {
   </div>`;
 }
 
+/**
+ * 写真一覧。写真が 1 枚のときは中身を空にする（入れ物の div は常に出す。
+ * 削除後の再描画でブラウザ側が差し替え先を見つけられるように）。
+ * 各マスは a ではなく div で包む（投稿者本人に出す「削除」ボタンを a の中に入れないため）。
+ */
 function galleryHtml(lv, photos) {
-  if (photos.length < 2) return '';
-  return `<div class="gal">
+  return `<div class="gal" data-lv="${lv.id}">${photos.length < 2 ? '' : `
     <h2>この塗装機の写真（${photos.length} 枚）</h2>
     <div class="grid">${photos.map((p) => `
-      <a class="gi" href="${escapeHtml(p.url)}" target="_blank" rel="noopener" title="${escapeHtml(p.caption || lv.name)}">
-        <img src="${escapeHtml(p.thumbUrl || p.url)}" alt="${escapeHtml(p.caption || lv.name)}" loading="lazy">
-        <span class="by">📷 ${escapeHtml(p.credit)}</span>
-      </a>`).join('')}</div>
+      <div class="gi" data-photo-id="${p.id}" data-user-id="${escapeHtml(p.userId || '')}">
+        <a href="${escapeHtml(p.url)}" target="_blank" rel="noopener" title="${escapeHtml(p.caption || lv.name)}">
+          <img src="${escapeHtml(p.thumbUrl || p.url)}" alt="${escapeHtml(p.caption || lv.name)}" loading="lazy">
+          <span class="by">📷 ${escapeHtml(p.credit)}</span>
+        </a>
+      </div>`).join('')}</div>`}
   </div>`;
 }
 
@@ -312,9 +319,15 @@ const STYLE = `<style>
   .info .src { margin-top: 8px; font-size: 12px; }
   .gal .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
   .gi { position: relative; display: block; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #0b1220; }
+  .gi > a { display: block; }
   .gi img { width: 100%; height: 78px; object-fit: cover; display: block; }
   .gi .by { position: absolute; left: 0; right: 0; bottom: 0; font-size: 9px; line-height: 1.4; padding: 1px 4px;
     background: rgba(0,0,0,.55); color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 投稿者本人にだけ JS が足す「この写真を削除」 */
+  .hero .act { padding: 6px 2px 0; }
+  .delbtn { cursor: pointer; }
+  .gi .delbtn { position: absolute; top: 4px; right: 4px; font-size: 9px; line-height: 1.4; padding: 2px 5px; border-radius: 6px; }
+  .hero[hidden], .gi[hidden] { display: none !important; }
   .now .nowline { font-size: 16px; font-weight: 700; line-height: 1.5; }
   .now .nowline a { color: var(--accent); }
   .now .s, .card .s { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
@@ -374,6 +387,147 @@ function clientScript() {
     if (window.AW) AW.report('livery', lv().id);
   });
 
+  // --- 自分の写真の削除（投稿者本人にだけボタンを出す） --------------------
+  // 本文はサーバーが描いているので、写真の実体（storagePath / userId）は
+  // /api/livery の応答から受け取る。削除したら同じ応答で描き直す
+  // （代表写真は 0005_credit_and_delete.sql の photos_after_delete が決め直す）。
+  var BUCKET = 'livery-photos';
+  var SESSION = null;
+  var PHOTOS = [];
+  var photoSig = null;
+
+  function sig(list) {
+    return list.map(function (p) { return p.id + ':' + p.credit + ':' + (p.isPrimary ? 1 : 0); }).join(',');
+  }
+  function photoById(id) {
+    for (var i = 0; i < PHOTOS.length; i++) if (PHOTOS[i].id === Number(id)) return PHOTOS[i];
+    return null;
+  }
+
+  // 以下 2 つは、このファイルのサーバー側 heroHtml / galleryHtml と同じ形を作る
+  // （撮影空港だけは /api/livery が名前しか返さないので「（IATA）」が付かない）
+  function heroHtml(lvi, p) {
+    if (!p) {
+      return '<div class="hero none" data-lv="' + lvi.id + '"><span class="ph">✈</span>'
+        + '<div class="cap">この塗装機の写真はまだありません。<br>'
+        + '<a class="aw-btn gold" href="/submit.html?reg=' + encodeURIComponent(lvi.reg) + '">あなたの写真を載せませんか</a></div></div>';
+    }
+    var credit = p.snsUrl
+      ? '<a href="' + esc(p.snsUrl) + '" target="_blank" rel="noopener noreferrer nofollow">' + esc(p.credit) + '</a>'
+      : esc(p.credit);
+    var where = [p.takenOn ? String(p.takenOn).replace(/-/g, '/') : '', p.airportName || p.airport || '']
+      .filter(function (x) { return !!x; }).join('・');
+    return '<div class="hero" data-lv="' + lvi.id + '" data-photo-id="' + p.id + '" data-user-id="' + esc(p.userId || '') + '">'
+      + '<a href="' + esc(p.url) + '" target="_blank" rel="noopener">'
+      + '<img src="' + esc(p.url) + '" alt="' + esc(lvi.name) + '（' + esc(lvi.reg) + '）"></a>'
+      + '<div class="cred">📷 ' + credit + (where ? '　<span class="s">' + esc(where) + '</span>' : '') + '</div>'
+      + (p.caption ? '<div class="cap">' + esc(p.caption) + '</div>' : '')
+      + '</div>';
+  }
+  function galleryHtml(lvi, list) {
+    if (list.length < 2) return '';
+    return '<h2>この塗装機の写真（' + list.length + ' 枚）</h2><div class="grid">'
+      + list.map(function (p) {
+        return '<div class="gi" data-photo-id="' + p.id + '" data-user-id="' + esc(p.userId || '') + '">'
+          + '<a href="' + esc(p.url) + '" target="_blank" rel="noopener" title="' + esc(p.caption || lvi.name) + '">'
+          + '<img src="' + esc(p.thumbUrl || p.url) + '" alt="' + esc(p.caption || lvi.name) + '" loading="lazy">'
+          + '<span class="by">📷 ' + esc(p.credit) + '</span></a></div>';
+      }).join('') + '</div>';
+  }
+
+  /** /api/livery の写真で本文を描き直す（代表写真の入れ替わり・削除のあと） */
+  function repaint() {
+    for (var i = 0; i < BOOT.liveries.length; i++) {
+      var lvi = BOOT.liveries[i];
+      var sec = document.querySelector('section.lv[data-i="' + i + '"]');
+      if (!sec) continue;
+      var mine = PHOTOS.filter(function (p) { return p.liveryId === lvi.id; });
+      var hero = sec.querySelector('.hero');
+      if (hero) hero.outerHTML = heroHtml(lvi, mine[0] || null);
+      var gal = sec.querySelector('.gal');
+      if (gal) gal.innerHTML = galleryHtml(lvi, mine);
+    }
+    decorate();
+  }
+
+  /** 自分が投稿した写真に削除ボタンを足す（他人の写真には何も出さない） */
+  function decorate() {
+    if (!SESSION || !PHOTOS.length) return;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-photo-id]'), function (el) {
+      var owner = el.getAttribute('data-user-id');
+      if (!owner || owner !== String(SESSION.user.id)) return;
+      if (el.querySelector('.delbtn')) return;
+      var id = Number(el.getAttribute('data-photo-id'));
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'aw-btn danger delbtn';
+      btn.textContent = 'この写真を削除';
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        removePhoto(id, btn);
+      });
+      if (el.className.indexOf('hero') === 0) {
+        var act = document.createElement('div');
+        act.className = 'act';
+        act.appendChild(btn);
+        el.appendChild(act);
+      } else {
+        el.appendChild(btn);
+      }
+    });
+  }
+
+  function removePhoto(id, btn) {
+    var p = photoById(id);
+    if (!p || !SESSION) return;
+    if (!window.confirm('この写真を削除します。元に戻せません。')) return;
+    btn.disabled = true;
+    doRemove(p).then(function () {
+      // まず画面から消す（/api/livery は s-maxage=20 なので、取り直しは cache:'no-store'）
+      Array.prototype.forEach.call(document.querySelectorAll('[data-photo-id="' + id + '"]'), function (el) { el.hidden = true; });
+      if (window.AW) AW.toast('写真を削除しました');
+      return poll();
+    }).catch(function (e) {
+      btn.disabled = false;
+      if (window.AW) AW.toast('削除に失敗しました: ' + (e && e.message ? e.message : e));
+    });
+  }
+
+  /**
+   * 実際の削除。
+   *  本物 … Storage の画像 → photos の行（RLS の photos_delete が本人だけを通す）
+   *  モック … 共有ページの写真はサーバー側のモックストアにあるので /api/photos に頼む
+   */
+  function doRemove(p) {
+    if (AW.config.mock) {
+      var headers = AW.authHeaders(SESSION);
+      headers['Content-Type'] = 'application/json';
+      return fetch('/api/photos', {
+        method: 'POST', headers: headers, cache: 'no-store',
+        body: JSON.stringify({ op: 'delete', photoId: p.id })
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (b) {
+          if (!r.ok) throw new Error(b.error || ('HTTP ' + r.status));
+          return b;
+        });
+      });
+    }
+    return AW.getSupabase().then(function (sb) {
+      if (!sb) throw new Error('Supabase に接続できません');
+      return sb.storage.from(BUCKET).remove([p.storagePath, p.thumbPath]).then(function (rm) {
+        if (rm && rm.error) throw new Error('画像の削除に失敗しました: ' + rm.error.message);
+        return sb.from('photos').delete().eq('id', p.id);
+      }).then(function (r) {
+        if (r && r.error) throw new Error('写真の削除に失敗しました: ' + r.error.message);
+      });
+    });
+  }
+
+  if (window.AW) {
+    AW.getSession().then(function (s) { SESSION = s; decorate(); }, function () { /* 未ログインは何も出さない */ });
+  }
+
   // --- 今どこ？（/api/livery を 30 秒ごと） -------------------------------
   function renderNow(pos) {
     var line = document.getElementById('nowLine');
@@ -389,9 +543,20 @@ function clientScript() {
   }
 
   function poll() {
-    fetch('/api/livery?reg=' + encodeURIComponent(BOOT.reg), { cache: 'no-store' })
+    return fetch('/api/livery?reg=' + encodeURIComponent(BOOT.reg), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (b) { renderNow(b && b.position); })
+      .then(function (b) {
+        if (b && b.photos) {
+          var next = sig(b.photos);
+          // 初回はサーバーが描いた本文と同じなので、ボタンを足すだけにする。
+          // 2 回目以降は中身が変わったときだけ描き直す（毎回描き直すと画像がちらつく）
+          var changed = photoSig !== null && next !== photoSig;
+          PHOTOS = b.photos;
+          photoSig = next;
+          if (changed) repaint(); else decorate();
+        }
+        renderNow(b && b.position);
+      })
       .catch(function () { renderNow(null); });
   }
 

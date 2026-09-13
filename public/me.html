@@ -26,8 +26,8 @@
     <section class="card">
       <h3>プロフィール</h3>
       <p class="note">
-        表示名は写真のクレジットに使います。<b>すでに投稿した写真のクレジットは投稿時点の名前で固定</b>されるため、
-        ここで名前を変えても過去の写真の表示は変わりません（変更を反映したい場合は管理者にご連絡ください）。
+        表示名は写真のクレジットに使います。ここで名前を変えると、<b>すでに投稿した写真のクレジットも
+        新しい表示名に変わります</b>（過去の分も含めて自動で置き換わります）。
       </p>
       <div class="field">
         <label for="dispName">表示名<span class="req">*</span></label>
@@ -239,6 +239,14 @@ async function saveProfile() {
   try {
     if (isMock) {
       mockdb.updateProfile(session.user.id, { display_name: name.value, sns_url: sns.value });
+      // モックはプロフィールのストアがブラウザ側とサーバー側で別なので、共有ページの
+      // クレジット（サーバー側モック）にも同じ変更を伝える。本物は 0005 のトリガー任せ
+      const headers = AW.authHeaders(session);
+      headers['Content-Type'] = 'application/json';
+      await fetch('/api/photos', {
+        method: 'POST', headers, cache: 'no-store',
+        body: JSON.stringify({ op: 'credit-sync', displayName: name.value }),
+      }).catch(() => { /* 反映できなくてもプロフィールの保存は成功 */ });
     } else {
       const client = await sb();
       const { error } = await client.from('profiles')

@@ -1,6 +1,7 @@
 /**
  * POST /api/photos（ログイン済みの誰でも）
- * body: { op: 'finalize', photoId }
+ * body: { op: 'finalize', photoId } / { op: 'delete', photoId } / { op: 'credit-sync', displayName }
+ *       （delete と credit-sync はモック専用）
  *
  * 写真の投稿はブラウザから supabase-js で直接 insert する。RLS（0001_init.sql の
  * photos_insert）は `status='pending'` しか許さないので、自動承認はクライアントでは行えない。
@@ -14,7 +15,7 @@
  *  - 設定が読めなかったときは承認しない（pending のまま＝管理者が見る）
  */
 import { requireUser, readBody, rejectNonPost, sendError } from '../lib/auth.js';
-import { adminUpdateStatus, assertPhotoPaths, getPhotoForFinalize, getSetting } from '../lib/db.js';
+import { adminUpdateStatus, assertPhotoPaths, deleteOwnPhoto, getPhotoForFinalize, getSetting, isMock, setMockDisplayName } from '../lib/db.js';
 
 export default async function handler(req, res) {
   if (rejectNonPost(req, res)) return;
@@ -30,7 +31,37 @@ export default async function handler(req, res) {
   }
 
   const op = String(body.op || 'finalize');
-  if (op !== 'finalize') return res.status(400).json({ error: `op が不正です: ${op}` });
+  if (op !== 'finalize' && op !== 'delete' && op !== 'credit-sync') {
+    return res.status(400).json({ error: `op が不正です: ${op}` });
+  }
+
+  // op:'credit-sync' … 表示名の変更を写真のクレジットに反映する（**モック専用**）。
+  // 本物は profiles の update が 0005_credit_and_delete.sql の profiles_sync_credit を
+  // 動かすので何もしなくてよい。モックはプロフィールのストアがブラウザ側とサーバー側で
+  // 分かれているため、/me.html の保存からこれを呼んで共有ページのクレジットを揃える。
+  if (op === 'credit-sync') {
+    if (!isMock()) return res.status(400).json({ error: '本番ではクレジットは自動で追随します' });
+    try {
+      return res.status(200).json(await setMockDisplayName(caller.id, body.displayName));
+    } catch (e) {
+      return sendError(res, e, '表示名の反映に失敗しました');
+    }
+  }
+
+  // op:'delete' … 投稿者本人が自分の写真を消す（**モック専用**）。
+  // 本物（Supabase）ではブラウザが Storage の remove → photos の delete を直接呼ぶ
+  // （RLS の photos_delete が本人だけを通す）。サーバーで消すと実ファイルが残るため
+  // ここには通さない。モックは Storage が無く、共有ページが見ている写真は
+  // lib/db.js のメモリ内ストアにあるので、この経路だけが消せる。
+  if (op === 'delete') {
+    if (!isMock()) return res.status(400).json({ error: '写真の削除はブラウザから直接行います' });
+    try {
+      const out = await deleteOwnPhoto(body.photoId, caller.id);
+      return res.status(200).json(out);
+    } catch (e) {
+      return sendError(res, e, '写真の削除に失敗しました');
+    }
+  }
 
   try {
     const photo = await getPhotoForFinalize(body.photoId);

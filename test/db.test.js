@@ -215,3 +215,70 @@ test('adminUpdateStatus: 引数の検証', async () => {
   await assert.rejects(() => db.adminUpdateStatus({ type: 'livery', id: 9999, action: 'approve' }), /見つかりません/);
   await assert.rejects(() => db.adminUpdateStatus({ type: 'photo', id: 9999, action: 'approve' }), /見つかりません/);
 });
+
+// ---------------------------------------------------------------------------
+// 0005_credit_and_delete.sql と同じ振る舞い（クレジットの追随・写真の削除）
+// ---------------------------------------------------------------------------
+
+/** JA819A に承認済みの写真を 1 枚足す */
+function seedApproved(over = {}) {
+  const lv = db.mock.store().liveries.find((r) => r.reg === 'JA819A');
+  return db.mock.addPhoto({
+    livery_id: lv.id, user_id: 'user1', credit_name: 'モック一般ユーザー', status: 'approved', ...over,
+  });
+}
+
+test('表示名を変えると自分の写真のクレジットも変わる（profiles_sync_credit と同じ）', async () => {
+  freshStore();
+  const mine = seedApproved({ created_at: '2020-01-01T00:00:00.000Z' });
+  const others = seedApproved({ user_id: 'user2', credit_name: '別の人', created_at: '2021-01-01T00:00:00.000Z' });
+
+  db.mock.setProfile('user1', { display_name: '新しい名前' });
+
+  assert.equal(mine.credit_name, '新しい名前');
+  assert.equal(others.credit_name, '別の人', '他人の写真は触らない');
+  const page = await db.getLiveryPageData('JA819A');
+  assert.deepEqual(page.photos.map((p) => p.credit), ['新しい名前', '別の人']);
+
+  // 表示名以外の更新ではクレジットを触らない
+  db.mock.setProfile('user1', { sns_url: 'https://x.com/mock_user1' });
+  assert.equal(mine.credit_name, '新しい名前');
+});
+
+test('代表写真を削除すると次に古い承認済み写真が代表になる（photos_after_delete と同じ）', async () => {
+  freshStore();
+  const first = seedApproved({ created_at: '2020-01-01T00:00:00.000Z' });
+  const second = seedApproved({ created_at: '2021-01-01T00:00:00.000Z' });
+  assert.equal(first.is_primary, true);
+  assert.equal(second.is_primary, false);
+
+  const out = await db.deleteOwnPhoto(first.id, 'user1');
+  assert.equal(out.ok, true);
+  assert.equal(second.is_primary, true);
+
+  const page = await db.getLiveryPageData('JA819A');
+  assert.equal(page.photos.length, 1);
+  assert.equal(page.photos[0].id, second.id);
+  assert.equal(page.photos[0].isPrimary, true);
+});
+
+test('deleteOwnPhoto: 他人の写真・無い写真は 404、引数は検証する', async () => {
+  freshStore();
+  const p = seedApproved();
+  await assert.rejects(() => db.deleteOwnPhoto(p.id, 'user2'), (e) => e.status === 404);
+  await assert.rejects(() => db.deleteOwnPhoto(9999, 'user1'), (e) => e.status === 404);
+  await assert.rejects(() => db.deleteOwnPhoto('x', 'user1'), /photoId が不正/);
+  await assert.rejects(() => db.deleteOwnPhoto(p.id, ''), /userId が必要/);
+  assert.equal(db.mock.store().photos.length, 1, '何も消えていない');
+});
+
+test('getLiveryPageData: 写真に userId / storagePath / thumbPath を含む（共有ページの削除に使う）', async () => {
+  freshStore();
+  const p = seedApproved();
+  const page = await db.getLiveryPageData('JA819A');
+  assert.equal(page.photos[0].userId, 'user1');
+  assert.equal(page.photos[0].storagePath, p.storage_path);
+  assert.equal(page.photos[0].thumbPath, p.thumb_path);
+  // メールアドレスは出さない
+  assert.equal(JSON.stringify(page).includes('@example.com'), false);
+});

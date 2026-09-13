@@ -148,16 +148,34 @@ test('新規登録と写真を同時に投稿する（/submit.html モード a�
   assert.equal(db.listMyLiveries('user1')[0].status, 'pending');
 });
 
-test('表示名を変えても既存写真のクレジットは固定される', () => {
+test('表示名を変えると既存写真のクレジットも変わる（0005 の profiles_sync_credit と同じ）', () => {
   const session = db.signIn('user1');
   const photo = submitPhoto(session, { id: 7, reg: 'JA819A', name: 'x' }, { agree: true }, 'uuid-3');
+  assert.equal(photo.credit_name, 'モック一般ユーザー');
   db.updateProfile('user1', { display_name: '新しい名前', sns_url: 'https://x.com/me' });
 
   const after = db.getSession();
   assert.equal(after.user.displayName, '新しい名前');
   assert.equal(after.user.snsUrl, 'https://x.com/me');
-  assert.equal(db.listMyPhotos('user1')[0].credit_name, photo.credit_name);
-  assert.equal(db.listMyPhotos('user1')[0].credit_name, 'モック一般ユーザー');
+  assert.equal(db.listMyPhotos('user1')[0].credit_name, '新しい名前');
+
+  // 表示名を変えなければクレジットも動かない
+  db.updateProfile('user1', { sns_url: 'https://x.com/me2' });
+  assert.equal(db.listMyPhotos('user1')[0].credit_name, '新しい名前');
+});
+
+test('代表写真を消すと次の承認済み写真が代表になる（0005 の photos_after_delete と同じ）', () => {
+  const session = db.signIn('user1');
+  const first = submitPhoto(session, { id: 7, reg: 'JA819A', name: 'x' }, { agree: true }, 'uuid-d1');
+  const second = submitPhoto(session, { id: 7, reg: 'JA819A', name: 'x' }, { agree: true }, 'uuid-d2');
+  db.finalizePhoto(first.id, true);
+  db.finalizePhoto(second.id, true);
+  assert.equal(db.dump().photos.find((p) => p.id === first.id).is_primary, true);
+
+  db.deletePhoto('user1', first.id);
+  const rows = db.dump().photos;
+  assert.equal(rows.some((p) => p.id === first.id), false);
+  assert.equal(rows.find((p) => p.id === second.id).is_primary, true);
 });
 
 test('localStorage に残るので再読み込み後も投稿が見える', () => {

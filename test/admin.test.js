@@ -403,12 +403,13 @@ test('POST /api/admin/sweep: モックでは何もしない', async () => {
   assert.equal(r.body.deleted, 0);
 });
 
-test('POST /api/admin/credit-backfill: 今の表示名を過去の写真に反映する', async () => {
+test('POST /api/admin/credit-backfill: 今の表示名を過去の写真に反映する（修復用）', async () => {
   const l = db.mock.addLivery({ reg: 'JA808A', name: 'クレジットテスト', status: 'approved' });
+  // 表示名を変えてから、クレジットがずれた（＝トリガー導入前のような）行を作る
+  db.mock.setProfile('user1', { display_name: '新しい名前' });
   db.mock.addPhoto({ livery_id: l.id, user_id: 'user1', credit_name: '旧すぎる名前', status: 'approved' });
   db.mock.addPhoto({ livery_id: l.id, user_id: 'user1', credit_name: '旧すぎる名前', status: 'pending' });
   db.mock.addPhoto({ livery_id: l.id, user_id: 'admin', credit_name: '他人', status: 'approved' });
-  db.mock.setProfile('user1', { display_name: '新しい名前' });
 
   const r = await call(creditBackfill, { as: 'mock:admin', method: 'POST', body: { userId: 'user1' } });
   assert.equal(r.code, 200);
@@ -614,11 +615,53 @@ test('POST /api/photos finalize: 他人の写真・未ログイン・不正な o
   const badId = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'finalize', photoId: '1; drop' } });
   assert.equal(badId.code, 400);
 
-  const badOp = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'delete', photoId: mine.id } });
+  const badOp = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'purge', photoId: mine.id } });
   assert.equal(badOp.code, 400);
 
   const get = await call(photos, { as: 'mock:user1' });
   assert.equal(get.code, 405);
+});
+
+test("POST /api/photos {op:'credit-sync'}: モックで表示名を写真のクレジットに反映する", async () => {
+  const l = db.mock.addLivery({ reg: 'JA814A', name: 'クレジット追随', status: 'approved' });
+  const mine = db.mock.addPhoto({ livery_id: l.id, user_id: 'user1', credit_name: '古い名前', status: 'approved' });
+  const other = db.mock.addPhoto({ livery_id: l.id, user_id: 'admin', credit_name: '他人', status: 'approved' });
+
+  const anon = await call(photos, { method: 'POST', body: { op: 'credit-sync', displayName: 'x' } });
+  assert.equal(anon.code, 401);
+
+  const ok = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'credit-sync', displayName: '追随した名前' } });
+  assert.equal(ok.code, 200);
+  assert.deepEqual(ok.body, { ok: true, userId: 'user1', displayName: '追随した名前' });
+  assert.equal(mine.credit_name, '追随した名前');
+  assert.equal(other.credit_name, '他人');
+  assert.equal((await db.getLiveryByReg('JA814A')).credit, '追随した名前');
+
+  for (const bad of ['', '   ', 'a'.repeat(41), '<script>']) {
+    const r = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'credit-sync', displayName: bad } });
+    assert.equal(r.code, 400, JSON.stringify(bad));
+  }
+});
+
+test("POST /api/photos {op:'delete'}: モックで自分の写真だけ消せる（共有ページの削除）", async () => {
+  const l = db.mock.addLivery({ reg: 'JA813A', name: '削除テスト', status: 'approved' });
+  const older = db.mock.addPhoto({ livery_id: l.id, user_id: 'user1', status: 'approved', created_at: '2020-01-01T00:00:00.000Z' });
+  const newer = db.mock.addPhoto({ livery_id: l.id, user_id: 'user1', status: 'approved', created_at: '2021-01-01T00:00:00.000Z' });
+  assert.equal(older.is_primary, true);
+
+  const anon = await call(photos, { method: 'POST', body: { op: 'delete', photoId: older.id } });
+  assert.equal(anon.code, 401);
+
+  const other = await call(photos, { as: 'mock:admin', method: 'POST', body: { op: 'delete', photoId: older.id } });
+  assert.equal(other.code, 404, '他人の写真は存在を教えない');
+
+  const ok = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'delete', photoId: older.id } });
+  assert.equal(ok.code, 200);
+  assert.equal(db.mock.store().photos.some((x) => x.id === older.id), false);
+  assert.equal(newer.is_primary, true, '代表写真が次の写真に移る');
+
+  const badId = await call(photos, { as: 'mock:user1', method: 'POST', body: { op: 'delete', photoId: '1; drop' } });
+  assert.equal(badId.code, 400);
 });
 
 test('自動承認された写真も通報 3 件で承認待ちに戻る', async () => {
