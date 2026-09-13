@@ -34,20 +34,20 @@
     <!-- 共有ページの「情報の修正を提案」（/submit.html?reg=...&mode=fix）から来たときの案内 -->
     <div id="fixNote" class="note" hidden>
       掲載内容の修正を提案するモードです。正しい内容で<b>もう一度登録</b>してください
-      （塗装名が同じなら管理者が既存の行を直します）。写真の差し替えだけなら「既存の塗装に写真を追加」へ。
+      （塗装機名が同じなら管理者が既存の行を直します）。写真の差し替えだけなら「既存の塗装機に写真を追加」へ。
       権利侵害などすぐ止めたい場合は共有ページの「通報」を使ってください。
     </div>
 
     <div class="tabs" id="tabs">
-      <button type="button" id="tabNew" class="on">新しい塗装を登録</button>
-      <button type="button" id="tabPhoto">既存の塗装に写真を追加</button>
+      <button type="button" id="tabNew" class="on">新しい塗装機を登録</button>
+      <button type="button" id="tabPhoto">既存の塗装機に写真を追加</button>
     </div>
 
-    <!-- (a) 新しい塗装 ------------------------------------------------------ -->
+    <!-- (a) 新しい塗装機 ------------------------------------------------------ -->
     <section class="card" id="secNew">
-      <h3>新しい特別塗装を登録する</h3>
+      <h3>新しい特別塗装機を登録する</h3>
       <p class="lead">
-        1 行 = 1 塗装です。同じ機体が塗り替えられた場合は別の塗装として登録してください。<br>
+        1 行 = 1 塗装機です。同じ機体が塗り替えられた場合は別の塗装機として登録してください。<br>
         投稿は管理者の承認後に公開されます。クレジット名は <b id="credit"></b> です。
       </p>
       <div class="err" hidden></div>
@@ -62,7 +62,7 @@
       <div id="regInfo"></div>
 
       <div class="field">
-        <label for="fName">塗装名<span class="req">*</span></label>
+        <label for="fName">塗装機名<span class="req">*</span></label>
         <input id="fName" name="name" type="text" placeholder="ピカチュウジェット NH" maxlength="80">
         <div class="bad" data-e="name" hidden></div>
       </div>
@@ -106,7 +106,7 @@
 
       <div class="field">
         <label for="fNote">一言説明（140 字以内）</label>
-        <textarea id="fNote" name="note" data-maxlen placeholder="ポケモン特別塗装"></textarea>
+        <textarea id="fNote" name="note" data-maxlen placeholder="ポケモン特別塗装機"></textarea>
         <div class="bad" data-e="note" hidden></div>
       </div>
 
@@ -158,16 +158,16 @@
       </div>
     </section>
 
-    <!-- (b) 既存の塗装に写真を追加 ----------------------------------------- -->
+    <!-- (b) 既存の塗装機に写真を追加 ----------------------------------------- -->
     <section class="card" id="secPhoto" hidden>
-      <h3>既存の塗装に写真を追加する</h3>
+      <h3>既存の塗装機に写真を追加する</h3>
       <p class="lead">
-        承認済みの塗装を探して選び、自分で撮影した写真を投稿します。クレジットは <b>投稿時点の表示名</b> で固定されます。
+        承認済みの塗装機を探して選び、自分で撮影した写真を投稿します。クレジットは <b>投稿時点の表示名</b> で固定されます。
       </p>
       <div class="err" hidden></div>
 
       <div class="field">
-        <label for="pSearch">塗装を探す（登録記号・塗装名）</label>
+        <label for="pSearch">塗装機を探す（登録記号・塗装機名）</label>
         <div style="display:flex; gap:6px">
           <input id="pSearch" type="search" placeholder="JA819A / ピカチュウ" autocomplete="off">
           <button type="button" class="aw-btn" id="btnPSearch">検索</button>

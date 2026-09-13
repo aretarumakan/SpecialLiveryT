@@ -8,30 +8,30 @@
 
 特別塗装機のリストは利用者の投稿で育てる（Supabase）。写真を投稿した人の名前が代表写真のクレジットに出る。
 詳細設計は `docs/design-crowd-livery.md`（フェーズ A〜D をすべて実装済み＝一覧・投稿・管理画面・共有ページ）。
-塗装ごとの共有ページ `/livery/:reg` は OG 画像つきで SNS に貼れる。
+塗装機ごとの共有ページ `/livery/:reg` は OG 画像つきで SNS に貼れる。
 
 ## 構成
 
 | パス | 役割 |
 |---|---|
 | `public/index.html` | スペマウォッチの画面（静的）。`/api/status` を 30 秒ごとに fetch。機体写真は Planespotters API をブラウザから直接取得 |
-| `public/liveries.html` | 承認済み特別塗装の一覧（検索・航空会社チップ・「運航中のみ」） |
+| `public/liveries.html` | 承認済み特別塗装機の一覧（検索・航空会社チップ・「運航中のみ」） |
 | `public/login.html` | ログイン（Google Identity Services のボタン → `signInWithIdToken`。モックではダミーユーザーの 2 ボタン）。初回は表示名の確認 |
-| `public/submit.html` | 投稿（(a) 新しい塗装を登録 / (b) 既存の塗装に写真を追加）。`public/js/upload.js` が処理 |
+| `public/submit.html` | 投稿（(a) 新しい塗装機を登録 / (b) 既存の塗装機に写真を追加）。`public/js/upload.js` が処理 |
 | `public/me.html` | マイページ（自分の投稿と状態、写真の削除、表示名・SNS URL の編集） |
-| `public/admin.html` | 管理画面（admin のみ）。承認待ちの塗装・写真の承認／却下、通報、代表写真の差し替え、設定（写真の自動承認）、管理者の追加／削除、ツール |
+| `public/admin.html` | 管理画面（admin のみ）。承認待ちの塗装機・写真の承認／却下、通報、代表写真の差し替え、設定（写真の自動承認）、管理者の追加／削除、ツール |
 | `public/terms.html` | 利用規約・写真の取り扱い（連絡先は `【連絡先を記入】` を置換する） |
 | `public/css/app.css` | 共通のデザイントークン（CSS 変数）と土台・ナビ・トーストのスタイル |
 | `public/js/nonce.js` | GIS 用の nonce（生 = base64url／Google に渡すのは SHA-256 の hex）。`login.html` と `test/auth.test.js` が使う |
 | `public/js/common.js` | 共通ヘッダ／ナビ、`/api/config` 取得、supabase-js の遅延読み込み、`window.AW`（`getSession` / `requireLogin` / `signOut` / `authHeaders` / `report`）。admin には「管理」リンクと承認待ちバッジを出す |
-| `public/js/upload.js` | 投稿画面の処理（既存塗装の照会・adsbdb 自動入力・Canvas 縮小・Storage upload・insert） |
+| `public/js/upload.js` | 投稿画面の処理（既存塗装機の照会・adsbdb 自動入力・Canvas 縮小・Storage upload・insert） |
 | `public/js/validate.js` | 入力検証の純関数（ブラウザと `node --test` で共用。登録記号・URL・日付・表示名） |
 | `public/js/mockdb.js` | モックモード用のクライアント側ストア（localStorage）。Supabase 無しで投稿の流れを試せる |
 | `api/status.js` | `GET /api/status?icao=RJTT`。`s-maxage=20` でエッジ共有 |
 | `api/config.js` | `GET /api/config` → `{ supabaseUrl, supabaseAnonKey, mock, autoApprovePhotos }`（`no-store`） |
 | `api/photos.js` | `POST /api/photos`（ログイン必須）。`{op:'finalize', photoId}` = 投稿直後の自分の写真を公開処理に回す（自動承認が ON なら承認する） |
 | `api/liveries.js` | `GET /api/liveries?airline=&q=&active=1` → 承認済み一覧（`s-maxage=60`） |
-| `api/livery.js` | `GET /api/livery?reg=` → 共有ページ用（塗装・承認済み写真・**現在地**。`s-maxage=20`） |
+| `api/livery.js` | `GET /api/livery?reg=` → 共有ページ用（塗装機・承認済み写真・**現在地**。`s-maxage=20`） |
 | `api/livery-page.js` | `GET /livery/:reg` の HTML（og:* をサーバーで埋める。vercel.json の rewrite 経由） |
 | `api/og.js` | `GET /api/og?reg=` → 1200×630 の OG 画像（Node Function・`@vercel/og` 0.6 系。1.x は Edge/Node とも Vercel で動かないため固定） |
 | `api/report.js` | `POST /api/report`（ログイン必須）。通報を登録。写真は未解決 3 件で自動的に承認待ちへ戻す |
@@ -41,7 +41,7 @@
 | `lib/status.js` | 取得・判定ロジック（adsb.lol → adsb.fi フォールバック、adsbdb 経路、駐機/到着/出発の判定）。`lookupRoute()` を公開 |
 | `lib/position.js` | 1 機だけの現在地（adsb.lol `/v2/reg/{reg}`）。駐機中/飛行中/受信なし/不明 + 最寄り空港・経路・到着まで |
 | `lib/og-render.js` | OG 画像の要素ツリーと日本語フォントのサブセット取得（`@vercel/og` は import しない） |
-| `lib/db.js` | 塗装 DB のアクセス層。Supabase（PostgREST に素の fetch）とメモリ内モックを同じ関数で提供 |
+| `lib/db.js` | 塗装機 DB のアクセス層。Supabase（PostgREST に素の fetch）とメモリ内モックを同じ関数で提供 |
 | `lib/airports.js` | 日本の主要 45 空港（ICAO/IATA/座標/空港とみなす半径） |
 | `lib/liveries.js` | 特別塗装機の初期データ・航空会社名・機種名の辞書 |
 | `supabase/migrations/` | Postgres スキーマ・RLS・Storage ポリシー・初期データ・アプリ設定（`0003_settings.sql`） |
@@ -96,7 +96,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 | `SUPABASE_SERVICE_ROLE_KEY` | 本番のみ | サーバー専用。承認・却下 API だけが使う |
 | `GOOGLE_CLIENT_ID` | 本番のみ | Google の **ウェブ アプリケーション** クライアント ID。公開可（`/api/config` の `googleClientId` でブラウザに渡す）。未設定だと `/login.html` が「Google ログインが未設定です（GOOGLE_CLIENT_ID）」と出す |
 | `MOCK_DB` | 任意 | `1` にすると `SUPABASE_URL` があってもモックで動く |
-| `MOCK_SEED_PENDING` | 任意 | `1` でモックにダミーを入れる（承認待ち: 塗装2・写真2・通報1／承認済み: JA819A の写真1）。`npm run dev` が自動で付ける |
+| `MOCK_SEED_PENDING` | 任意 | `1` でモックにダミーを入れる（承認待ち: 塗装機2・写真2・通報1／承認済み: JA819A の写真1）。`npm run dev` が自動で付ける |
 
 コードパスの分岐は `lib/db.js`（サーバー側）と `public/js/common.js`（ブラウザ側）の 2 箇所で判定し、
 投稿画面はその結果（`AW.config.mock`）を見て `public/js/mockdb.js` か supabase-js のどちらかを呼ぶ。
@@ -132,8 +132,8 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
   「孤児ファイルの掃除」（`POST /api/admin/sweep`）で回収する（フェーズ C で実装）
 - `credit_name` は**投稿時点の表示名で固定**する。あとでマイページで改名しても過去の写真のクレジットは変わらない
   （`/me.html` と `/terms.html` にその旨を明記している）
-- 登録記号を入れて欄から離れると、`/api/liveries?q=` で既存の承認済み塗装を照会し（あれば
-  「この塗装に写真を追加」へ誘導）、`https://api.adsbdb.com/v0/aircraft/{reg}` をブラウザから直接引いて
+- 登録記号を入れて欄から離れると、`/api/liveries?q=` で既存の承認済み塗装機を照会し（あれば
+  「この塗装機に写真を追加」へ誘導）、`https://api.adsbdb.com/v0/aircraft/{reg}` をブラウザから直接引いて
   航空会社・機種を自動入力する（`access-control-allow-origin: *` を確認済みのためプロキシは不要）
 
 ### 管理のしくみ（フェーズ C）
@@ -143,11 +143,11 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 
 | エンドポイント | メソッド | 役割 |
 |---|---|---|
-| `/api/admin/pending` | GET | 承認待ちの塗装・写真（サムネイル付き）・未解決の通報・件数 |
+| `/api/admin/pending` | GET | 承認待ちの塗装機・写真（サムネイル付き）・未解決の通報・件数 |
 | `/api/admin/approve` | POST | `{type:'livery'\|'photo', id, action:'approve'\|'reject', reason?}`。却下は理由必須 |
 | `/api/admin/primary` | GET / POST | 登録記号で承認済み写真を一覧 / `{photoId}` を代表写真にする |
 | `/api/admin/reports` | GET / POST | 通報の一覧 / `{id}` を解決済みにする |
-| `/api/admin/hex-fill` | POST | hex が空の塗装を adsbdb `/v0/aircraft/{reg}` の `mode_s` で補完（1 回 30 件まで） |
+| `/api/admin/hex-fill` | POST | hex が空の塗装機を adsbdb `/v0/aircraft/{reg}` の `mode_s` で補完（1 回 30 件まで） |
 | `/api/admin/sweep` | POST | Storage の孤児ファイル掃除（`{dryRun:true}` で一覧だけ。モックは何もしない） |
 | `/api/admin/credit-backfill` | POST | `{userId}` のクレジットを今の表示名に付け替える（改名の反映依頼用） |
 | `/api/admin/users` | GET | 管理者の一覧（`admins`）と `?q=` でのユーザー検索（表示名の部分一致・メールの完全一致） |
@@ -161,7 +161,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
   モックでは `Bearer mock:<userId>`（`public/js/mockdb.js` の `mock-<id>` も受ける）
 - **service role キーは RLS を素通りする**ので、入力は `lib/db.js` で必ず絞る
   （id は 1 以上の整数、`type`/`action`/`targetType` は列挙、理由は 500 字以内、登録記号と hex は正規表現）
-- **代表写真**: 写真を承認すると `decide_primary()` が走り、その塗装に代表写真が無ければその写真が代表になる
+- **代表写真**: 写真を承認すると `decide_primary()` が走り、その塗装機に代表写真が無ければその写真が代表になる
   （= 最初に承認された投稿者がサムネイル権を得る）。管理者は「代表写真の差し替え」で `set_primary_photo()` を呼べる
 - **通報**: 同じ写真に未解決の通報が 3 件たまると自動で `status='pending'`（非表示）に戻し、代表写真を繰り上げる。
   管理者は `/admin.html` の「通報」で再判断して、却下するか「解決にする」
@@ -183,33 +183,33 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 #### 写真の自動承認（設定）
 
 `/admin.html` の「設定」の **「写真を自動で承認する」**（`app_settings.auto_approve_photos`・**既定 ON**）。
-塗装の登録は設定に関わらず常に承認待ち（＝手で確認する）で、自動承認されるのは**写真だけ**。
+塗装機の登録は設定に関わらず常に承認待ち（＝手で確認する）で、自動承認されるのは**写真だけ**。
 
 - クライアントの insert は RLS（`photos_insert`）の都合で必ず `status='pending'` なので、
   `public/js/upload.js` は insert の直後に `POST /api/photos`（`{op:'finalize', photoId}`）を呼ぶ。
   サーバーは**投稿者本人の pending の写真**であることを確かめ、設定が ON なら管理者の承認と同じ道
   （`adminUpdateStatus` → `decide_primary`）で承認する。承認者は「システム」なので `approved_by` は NULL
 - 投稿完了画面は結果に応じて **「公開されました」／「承認待ちです」** を出し分ける
-- 承認待ちの塗装に付いた写真は先に承認されうるが、一覧・共有ページの問い合わせは
-  いずれも `liveries.status = 'approved'` で絞っているので、**塗装が承認されるまで表示されない**
+- 承認待ちの塗装機に付いた写真は先に承認されうるが、一覧・共有ページの問い合わせは
+  いずれも `liveries.status = 'approved'` で絞っているので、**塗装機が承認されるまで表示されない**
 - 設定が読めなかったときは承認しない（承認待ちのまま管理者に回る）
 - 通報の 3 件ルールは自動承認された写真にもそのまま効く（未解決 3 件で承認待ちに戻る）
 - モックモードでは `/api/config` の `autoApprovePhotos` を `public/js/mockdb.js` が同じように解釈する
 
 ### 共有ページ（フェーズ D）
 
-`/livery/:reg` は塗装 1 件ぶんの共有ページ。SNS のクローラは JS を実行しないので、
+`/livery/:reg` は塗装機 1 件ぶんの共有ページ。SNS のクローラは JS を実行しないので、
 `<head>` の `og:*` と本文は **`api/livery-page.js` がサーバー側で描く**。
 ブラウザ側の JS は「今どこ？」のポーリング・タブ切り替え・共有ボタン・通報だけを担当する。
 
 | 部品 | 内容 |
 |---|---|
-| og:title | `{塗装名}（{登録記号}）\| スペマウォッチ` |
+| og:title | `{塗装機名}（{登録記号}）\| スペマウォッチ` |
 | og:description | `{航空会社} {機種}・{期間}・写真: {撮影者名}`（写真が無ければ「写真募集中」） |
 | og:image | `{絶対URL}/api/og?reg=`（`twitter:card` は `summary_large_image`） |
-| 本文 | 大きな代表写真（撮影者名・SNS リンク）／塗装情報・出典／今どこ？／ギャラリー（2 枚以上のとき）／共有・投稿・通報 |
-| 未登録の登録記号 | **404** を返し「この機体の塗装を登録する」（`/submit.html?reg=`）へ誘導 |
-| 複数の塗装 | 同じ登録記号に複数あればタブ表示（運航中 → 新しい順） |
+| 本文 | 大きな代表写真（撮影者名・SNS リンク）／塗装機情報・出典／今どこ？／ギャラリー（2 枚以上のとき）／共有・投稿・通報 |
+| 未登録の登録記号 | **404** を返し「この機体の塗装機を登録する」（`/submit.html?reg=`）へ誘導 |
+| 複数の塗装機 | 同じ登録記号に複数あればタブ表示（運航中 → 新しい順） |
 
 **今どこ？**（`GET /api/livery?reg=` の `position`。`lib/position.js`）
 
@@ -221,7 +221,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 | `unknown` | 「現在地を取得できませんでした」（adsb.lol の障害・タイムアウト・429） |
 
 経路照会は `lib/status.js` の `lookupRoute()` を `/api/status` と共用する（adsbdb・6 時間キャッシュ）。
-X の投稿文は `✈ {塗装名}（{登録記号}）は今 {現在地}！ {URL} #スペマウォッチ #特別塗装機`。
+X の投稿文は `✈ {塗装機名}（{登録記号}）は今 {現在地}！ {URL} #スペマウォッチ #特別塗装機`。
 現在地が分からないときは「は今 〜！」を落とす。
 
 **OG 画像（`/api/og`）**
@@ -240,7 +240,7 @@ X の投稿文は `✈ {塗装名}（{登録記号}）は今 {現在地}！ {URL
 
 **トップ画面との関係**: 特別塗装機のカードは DB の代表写真（`special.thumbUrl`）を優先し、
 その枠は Planespotters の照会枠（1 更新 8 件）を消費しない。写真がまだ無い特別塗装機は
-これまでどおり Planespotters にフォールバックする。カードの写真と塗装名は `/livery/{登録記号}` に飛ぶ。
+これまでどおり Planespotters にフォールバックする。カードの写真と塗装機名は `/livery/{登録記号}` に飛ぶ。
 
 ### モックモードのログイン
 

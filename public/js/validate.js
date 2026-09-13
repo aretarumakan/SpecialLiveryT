@@ -73,7 +73,7 @@ function trimOrNull(v) {
 }
 
 /**
- * 新しい塗装の入力を検証して、liveries に insert する行を作る。
+ * 新しい塗装機の入力を検証して、liveries に insert する行を作る。
  * @param {Object} input フォームの生の値
  * @returns {{ok:boolean, errors:Object<string,string>, row:Object|null}}
  */
@@ -84,8 +84,8 @@ export function validateLiveryForm(input = {}) {
   else if (!REG_RE.test(reg)) errors.reg = '登録記号の形が違います（例: JA819A / N12345）';
 
   const name = String(input.name == null ? '' : input.name).trim();
-  if (!name) errors.name = '塗装名を入れてください';
-  else if (name.length > 80) errors.name = '塗装名は 80 字以内にしてください';
+  if (!name) errors.name = '塗装機名を入れてください';
+  else if (name.length > 80) errors.name = '塗装機名は 80 字以内にしてください';
 
   const sourceUrl = String(input.source_url == null ? '' : input.source_url).trim();
   if (!sourceUrl) errors.source_url = '出典 URL を入れてください（公式発表を推奨）';

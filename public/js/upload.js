@@ -1,11 +1,11 @@
 /**
- * /submit.html の処理（塗装の登録・写真の投稿）
+ * /submit.html の処理（塗装機の登録・写真の投稿）
  *
  * <script type="module" src="/js/upload.js"></script> で読み込む（common.js は先に classic で読む）。
  *
  * やること
- *  1. 2 モードの切り替え（(a) 新しい塗装を登録 / (b) 既存の塗装に写真を追加）
- *  2. 登録記号の検証・既存塗装の照会（/api/liveries?q=）・adsbdb での機種/航空会社の自動入力
+ *  1. 2 モードの切り替え（(a) 新しい塗装機を登録 / (b) 既存の塗装機に写真を追加）
+ *  2. 登録記号の検証・既存塗装機の照会（/api/liveries?q=）・adsbdb での機種/航空会社の自動入力
  *  3. 写真を Canvas で長辺 1600px（q0.85）と 320px（q0.8）に縮小し、2 枚 upload
  *  4. 両方の upload が成功してから photos を insert（途中で失敗したら upload 済みを消す）
  *
@@ -40,7 +40,7 @@ let session = null;
 let isMock = true;
 let mockdb = null;
 let airports = [];
-let selectedLivery = null;   // モード (b) で選んだ塗装 {id, reg, name}
+let selectedLivery = null;   // モード (b) で選んだ塗装機 {id, reg, name}
 const files = { n: null, p: null };   // 選択中の File（プレフィックスごと）
 
 // ---------------------------------------------------------------------------
@@ -125,8 +125,8 @@ async function insertLivery(row) {
     .select('id,reg,name,status')
     .single();
   if (error) {
-    if (String(error.code) === '23505') throw new Error('同じ機体に同じ塗装名が既に登録されています。写真の追加をお使いください。');
-    throw new Error(error.message || '塗装の登録に失敗しました');
+    if (String(error.code) === '23505') throw new Error('同じ機体に同じ塗装機名が既に登録されています。写真の追加をお使いください。');
+    throw new Error(error.message || '塗装機の登録に失敗しました');
   }
   return data;
 }
@@ -217,7 +217,7 @@ async function finalizePhoto(photo) {
 }
 
 // ---------------------------------------------------------------------------
-// 既存塗装の照会と adsbdb
+// 既存塗装機の照会と adsbdb
 // ---------------------------------------------------------------------------
 
 /** /api/liveries?q= で承認済みを探し、登録記号が一致するものだけ返す */
@@ -340,7 +340,7 @@ function wireFileInput(prefix) {
   });
 }
 
-/** 登録記号の blur: 既存塗装の照会と adsbdb の自動入力 */
+/** 登録記号の blur: 既存塗装機の照会と adsbdb の自動入力 */
 function wireRegLookup() {
   const input = document.querySelector('#secNew input[name="reg"]');
   const info = $('regInfo');
@@ -364,10 +364,10 @@ function wireRegLookup() {
     if (existing.length) {
       html += '<div class="note">この機体には既に '
         + existing.map((it) => '「' + AW.esc(it.name) + '」').join('、')
-        + ' が登録されています。同じ塗装なら写真の追加をお使いください。</div>'
+        + ' が登録されています。同じ塗装機なら写真の追加をお使いください。</div>'
         + '<div class="actions">' + existing.map((it) =>
           '<button type="button" class="aw-btn gold" data-pick="' + it.id + '">'
-          + 'この塗装に写真を追加: ' + AW.esc(it.name) + '</button>').join('') + '</div>';
+          + 'この塗装機に写真を追加: ' + AW.esc(it.name) + '</button>').join('') + '</div>';
     }
     if (ac) {
       html += '<div class="s">adsbdb: ' + AW.esc([ac.owner, ac.type].filter(Boolean).join(' / ') || '情報なし') + '</div>';
@@ -393,14 +393,14 @@ function wireRegLookup() {
 }
 
 // ---------------------------------------------------------------------------
-// モード (b) 既存の塗装に写真を追加
+// モード (b) 既存の塗装機に写真を追加
 // ---------------------------------------------------------------------------
 
 function renderSearchResults(items) {
   const box = $('pResults');
   if (!items.length) {
-    box.innerHTML = '<div class="s">該当する承認済みの塗装がありません。'
-      + '<a href="#" id="toNew">新しい塗装として登録する</a></div>';
+    box.innerHTML = '<div class="s">該当する承認済みの塗装機がありません。'
+      + '<a href="#" id="toNew">新しい塗装機として登録する</a></div>';
     const a = $('toNew');
     if (a) a.addEventListener('click', (e) => { e.preventDefault(); setMode('new'); });
     return;
@@ -410,7 +410,7 @@ function renderSearchResults(items) {
     + (it.thumbUrl ? '<img src="' + AW.esc(it.thumbUrl) + '" alt="">' : '<div class="ph">✈</div>')
     + '<div class="t">' + AW.esc(it.name) + '</div>'
     + '<div class="s">' + AW.esc(it.reg) + '　' + AW.esc([it.airline, it.type].filter(Boolean).join('・')) + '</div>'
-    + '<div class="act"><button type="button" class="aw-btn primary" data-id="' + it.id + '">この塗装を選ぶ</button></div>'
+    + '<div class="act"><button type="button" class="aw-btn primary" data-id="' + it.id + '">この塗装機を選ぶ</button></div>'
     + '</div>').join('') + '</div>';
   for (const btn of box.querySelectorAll('[data-id]')) {
     btn.addEventListener('click', () => {
@@ -422,7 +422,7 @@ function renderSearchResults(items) {
 
 function choosePhotoTarget(item) {
   selectedLivery = { id: item.id, reg: normalizeReg(item.reg), name: item.name, status: 'approved' };
-  $('pSelected').innerHTML = '<div class="note">写真を追加する塗装: <b>' + AW.esc(item.name) + '</b>（'
+  $('pSelected').innerHTML = '<div class="note">写真を追加する塗装機: <b>' + AW.esc(item.name) + '</b>（'
     + AW.esc(selectedLivery.reg) + '）</div>';
   $('pResults').innerHTML = '';
   $('pSearch').value = selectedLivery.reg;
@@ -433,7 +433,7 @@ function choosePhotoTarget(item) {
 async function runSearch() {
   const box = $('pResults');
   const q = $('pSearch').value.trim();
-  if (!q) { box.innerHTML = '<div class="s">登録記号か塗装名を入れてください。</div>'; return; }
+  if (!q) { box.innerHTML = '<div class="s">登録記号か塗装機名を入れてください。</div>'; return; }
   box.innerHTML = '<div class="s">検索中…</div>';
   try {
     const res = await fetch('/api/liveries?q=' + encodeURIComponent(q), { cache: 'no-store' });
@@ -503,14 +503,14 @@ async function submitNew() {
         photoStatus = await finalizePhoto(saved);
       } catch (e) {
         photoOk = false;
-        AW.toast('塗装は登録できましたが写真の投稿に失敗しました: ' + e.message);
+        AW.toast('塗装機は登録できましたが写真の投稿に失敗しました: ' + e.message);
       }
     }
-    // 塗装そのものは必ず管理者の承認待ち（自動承認は写真だけ）
+    // 塗装機そのものは必ず管理者の承認待ち（自動承認は写真だけ）
     done('承認待ちです', photoOk
       ? '「' + live.row.name + '」（' + live.row.reg + '）を受け付けました。管理者の承認後に一覧とスペマウォッチに出ます。'
-        + (photoStatus === 'approved' ? '写真は公開済みで、塗装が承認されると一緒に表示されます。' : '')
-      : '塗装の登録だけ受け付けました。写真はマイページから投稿し直してください。');
+        + (photoStatus === 'approved' ? '写真は公開済みで、塗装機が承認されると一緒に表示されます。' : '')
+      : '塗装機の登録だけ受け付けました。写真はマイページから投稿し直してください。');
   } catch (e) {
     fatal(section, e.message || String(e));
     btn.disabled = false;
@@ -521,7 +521,7 @@ async function submitNew() {
 async function submitPhoto() {
   const section = $('secPhoto');
   clearFatal(section);
-  if (!selectedLivery) { fatal(section, '写真を追加する塗装を選んでください。'); return; }
+  if (!selectedLivery) { fatal(section, '写真を追加する塗装機を選んでください。'); return; }
   const raw = readFields(section);
   const hasFile = !!files.p;
   const photo = validatePhotoForm(raw, { requirePhoto: true, hasFile });
@@ -537,7 +537,7 @@ async function submitPhoto() {
     const status = await finalizePhoto(saved);
     if (status === 'approved') {
       done('公開されました', '「' + selectedLivery.name + '」（' + selectedLivery.reg
-        + '）への写真を公開しました。その塗装にまだ代表写真が無ければ、この写真が代表写真になります。'
+        + '）への写真を公開しました。その塗装機にまだ代表写真が無ければ、この写真が代表写真になります。'
         + '（不適切な写真は通報で取り下げられます）');
     } else {
       done('承認待ちです', '「' + selectedLivery.name + '」（' + selectedLivery.reg
@@ -587,7 +587,7 @@ async function start() {
 
   await loadAirports();
 
-  // ?reg=XXXX … 承認済みの塗装があればモード (b)、無ければモード (a) に前入力
+  // ?reg=XXXX … 承認済みの塗装機があればモード (b)、無ければモード (a) に前入力
   const params = new URLSearchParams(location.search);
   const reg = normalizeReg(params.get('reg') || '');
   // ?mode=fix … 共有ページの「情報の修正を提案」からの導線。案内だけ出して登録モードにする

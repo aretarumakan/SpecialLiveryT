@@ -49,7 +49,7 @@ test('validateLiveryForm: 必須は reg / name / source_url', () => {
   const ok = v.validateLiveryForm({
     reg: ' ja819a ', name: ' ピカチュウジェット NH ', name_en: '',
     airline: 'ANA', aircraft_type: 'B787-8', since: '2021-11-01', until_date: '',
-    source_url: 'https://www.ana.co.jp/pr', note: 'ポケモン特別塗装', color: '#F4C20D',
+    source_url: 'https://www.ana.co.jp/pr', note: 'ポケモン特別塗装機', color: '#F4C20D',
   });
   assert.equal(ok.ok, true);
   assert.deepEqual(ok.row, {
@@ -61,7 +61,7 @@ test('validateLiveryForm: 必須は reg / name / source_url', () => {
     since: '2021-11-01',
     until_date: null,
     source_url: 'https://www.ana.co.jp/pr',
-    note: 'ポケモン特別塗装',
+    note: 'ポケモン特別塗装機',
     color: '#f4c20d',
     status: 'pending',          // RLS の liveries_insert が要求する固定値
   });

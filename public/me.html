@@ -45,9 +45,9 @@
       </div>
     </section>
 
-    <!-- 投稿した塗装 -->
+    <!-- 投稿した塗装機 -->
     <section class="card">
-      <h3>登録した塗装 <span class="badge" id="cntLiveries">0</span></h3>
+      <h3>登録した塗装機 <span class="badge" id="cntLiveries">0</span></h3>
       <div id="liveryList"><div class="s">読み込み中…</div></div>
     </section>
 
@@ -60,7 +60,7 @@
 
     <div class="actions" style="margin-bottom:16px">
       <a class="aw-btn gold" href="/submit.html">新しく投稿する</a>
-      <a class="aw-btn ghost" href="/liveries.html">特別塗装の一覧</a>
+      <a class="aw-btn ghost" href="/liveries.html">特別塗装機の一覧</a>
     </div>
   </div>
 </main>
@@ -140,7 +140,7 @@ function renderLiveries(rows) {
   $('cntLiveries').textContent = rows.length;
   if (!rows.length) {
     $('liveryList').innerHTML = '<div class="s">まだ登録はありません。'
-      + '<a href="/submit.html">新しい塗装を登録する</a></div>';
+      + '<a href="/submit.html">新しい塗装機を登録する</a></div>';
     return;
   }
   $('liveryList').innerHTML = '<div class="plist">' + rows.map((r) =>
@@ -154,7 +154,7 @@ function renderLiveries(rows) {
         ? '<div class="why">却下の理由: ' + esc(r.reject_reason) + '<br>理由を直して再投稿できます。</div>' : '')
     + '<div class="act">'
       + (r.status === 'approved'
-          ? '<a class="aw-btn" href="/submit.html?reg=' + encodeURIComponent(r.reg) + '">この塗装に写真を追加</a>'
+          ? '<a class="aw-btn" href="/submit.html?reg=' + encodeURIComponent(r.reg) + '">この塗装機に写真を追加</a>'
           : '')
       + (r.status === 'rejected'
           ? '<a class="aw-btn" href="/submit.html?reg=' + encodeURIComponent(r.reg) + '">再投稿する</a>'
@@ -171,7 +171,7 @@ function renderPhotos(rows) {
     return;
   }
   $('photoList').innerHTML = '<div class="plist">' + rows.map((p) => {
-    const title = (p.livery && p.livery.name) || ('塗装 #' + p.livery_id);
+    const title = (p.livery && p.livery.name) || ('塗装機 #' + p.livery_id);
     const reg = (p.livery && p.livery.reg) || '';
     return '<div class="prow">'
       + (p.thumbUrl ? '<img src="' + esc(p.thumbUrl) + '" alt="" loading="lazy">' : '<div class="ph">✈</div>')

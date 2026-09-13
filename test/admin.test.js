@@ -128,7 +128,7 @@ test('管理 API はメソッド違いを 405 で弾く', async () => {
 // ---------------------------------------------------------------------------
 
 test('GET /api/admin/pending: 承認待ちと通報と件数を返す', async () => {
-  const l = db.mock.addLivery({ reg: 'JA801A', name: 'テスト塗装', airline: 'ANA', created_by: 'user1', source_url: 'https://example.com/a' });
+  const l = db.mock.addLivery({ reg: 'JA801A', name: 'テスト塗装機', airline: 'ANA', created_by: 'user1', source_url: 'https://example.com/a' });
   const p = db.mock.addPhoto({ livery_id: 7, user_id: 'user1', credit_name: '撮影者A' });
   db.mock.addReport({ target_type: 'livery', target_id: l.id, reason: '出典が怪しい', reporter_id: 'user1' });
 
@@ -138,7 +138,7 @@ test('GET /api/admin/pending: 承認待ちと通報と件数を返す', async ()
   assert.deepEqual(r.body.counts, { liveries: 1, photos: 1, reports: 1, total: 2 });
 
   assert.equal(r.body.liveries.length, 1);
-  assert.equal(r.body.liveries[0].name, 'テスト塗装');
+  assert.equal(r.body.liveries[0].name, 'テスト塗装機');
   assert.equal(r.body.liveries[0].createdByName, 'モック一般ユーザー');
   assert.equal(r.body.liveries[0].sourceUrl, 'https://example.com/a');
 
@@ -150,7 +150,7 @@ test('GET /api/admin/pending: 承認待ちと通報と件数を返す', async ()
 
   assert.equal(r.body.reports.length, 1);
   assert.equal(r.body.reports[0].reason, '出典が怪しい');
-  assert.match(r.body.reports[0].target.label, /テスト塗装（JA801A）/);
+  assert.match(r.body.reports[0].target.label, /テスト塗装機（JA801A）/);
   assert.equal(r.body.reports[0].reporterName, 'モック一般ユーザー');
 });
 
@@ -158,7 +158,7 @@ test('GET /api/admin/pending: 承認待ちと通報と件数を返す', async ()
 // /api/admin/approve
 // ---------------------------------------------------------------------------
 
-test('POST /api/admin/approve: 塗装の承認で一覧に出る', async () => {
+test('POST /api/admin/approve: 塗装機の承認で一覧に出る', async () => {
   const l = db.mock.addLivery({ reg: 'JA802A', name: '承認テスト', airline: 'JAL', created_by: 'user1' });
   const r = await call(approve, { as: 'mock:admin', method: 'POST', body: { type: 'livery', id: l.id, action: 'approve' } });
   assert.equal(r.code, 200);

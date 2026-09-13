@@ -66,7 +66,7 @@ test('getLiveryByReg: 小文字でも引ける / 未知は null', async () => {
 
 test('listLiveries: 既定は承認済みのみ', async () => {
   freshStore();
-  db.mock.addLivery({ reg: 'JA001P', name: '承認待ちの塗装', airline: 'ANA' });
+  db.mock.addLivery({ reg: 'JA001P', name: '承認待ちの塗装機', airline: 'ANA' });
   const approved = await db.listLiveries();
   assert.equal(approved.length, 11);
   assert.ok(!approved.some((i) => i.reg === 'JA001P'));
@@ -104,7 +104,7 @@ test('listLiveries: airline / q で絞り込める', async () => {
 
 test('listLiveries: activeOnly は運航終了を除く', async () => {
   freshStore();
-  db.mock.addLivery({ reg: 'JA002R', name: '退役した塗装', airline: 'JAL', status: 'approved', until_date: '2020-01-31' });
+  db.mock.addLivery({ reg: 'JA002R', name: '退役した塗装機', airline: 'JAL', status: 'approved', until_date: '2020-01-31' });
   const all = await db.listLiveries();
   assert.equal(all.length, 12);
   const retired = all.find((i) => i.reg === 'JA002R');
@@ -186,16 +186,16 @@ test('getPendingCounts: 承認待ちと未解決の通報を数える', async ()
   assert.equal(after.liveries, 0);
 });
 
-test('adminUpdateStatus: 塗装の承認・却下', async () => {
+test('adminUpdateStatus: 塗装機の承認・却下', async () => {
   freshStore();
-  const l = db.mock.addLivery({ reg: 'JA004P', name: '新しい塗装', airline: 'ANA', created_by: 'user-1' });
+  const l = db.mock.addLivery({ reg: 'JA004P', name: '新しい塗装機', airline: 'ANA', created_by: 'user-1' });
   assert.equal((await db.getLiveryByReg('JA004P')), null);
 
   const ok = await db.adminUpdateStatus({ type: 'livery', id: l.id, action: 'approve', adminId: 'admin-1' });
   assert.deepEqual(ok, { ok: true, type: 'livery', id: l.id, status: 'approved', primaryPhotoId: null });
   assert.equal(l.approved_by, 'admin-1');
   assert.ok(l.approved_at);
-  assert.equal((await db.getLiveryByReg('JA004P')).name, '新しい塗装');
+  assert.equal((await db.getLiveryByReg('JA004P')).name, '新しい塗装機');
 
   await db.adminUpdateStatus({ type: 'livery', id: l.id, action: 'reject', reason: '出典が無い' });
   assert.equal(l.status, 'rejected');

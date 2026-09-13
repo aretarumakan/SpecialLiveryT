@@ -1,5 +1,5 @@
 /**
- * GET /livery/:reg — 塗装ごとの共有ページ（HTML を返す Function）。
+ * GET /livery/:reg — 塗装機ごとの共有ページ（HTML を返す Function）。
  *
  * vercel.json の rewrite で `/livery/:reg` → `/api/livery-page?reg=:reg`。
  * ローカルの test/dev-server.js も同じ経路で呼ぶ。
@@ -7,7 +7,7 @@
  * SNS のクローラは JavaScript を実行しないので、`<head>` の og:* は **サーバー側で** 埋める
  * （設計書 §4）。本文も DB の内容をサーバーで描いてしまい、ブラウザ側の JS は
  *   - 「今どこ？」の 30 秒ポーリング（/api/livery）
- *   - 塗装が複数あるときのタブ切り替え
+ *   - 塗装機が複数あるときのタブ切り替え
  *   - 共有ボタンの URL 組み立て・リンクのコピー・通報
  * だけを担当する。
  *
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     if (e && e.status === 400) return sendNotFound(res, reg, origin, '登録記号の形式が正しくありません');
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.status(502).send(errorPage(`塗装データの取得に失敗しました: ${escapeHtml(e.message)}`));
+    return res.status(502).send(errorPage(`塗装機データの取得に失敗しました: ${escapeHtml(e.message)}`));
   }
   if (!data.liveries.length) return sendNotFound(res, reg, origin, 'まだ登録されていません');
 
@@ -132,8 +132,8 @@ function errorPage(message) {
 /** 未登録の登録記号。404 を返しつつ「登録する」導線を出す（設計書 §4 の重複抑止と同じ発想） */
 function sendNotFound(res, reg, origin, why) {
   const safeReg = escapeHtml(reg);
-  const title = `${reg || '登録記号なし'} の塗装は未登録 | ${SITE_NAME}`;
-  const description = `${reg || 'この機体'} の特別塗装はまだ登録されていません。あなたの投稿で登録できます。`;
+  const title = `${reg || '登録記号なし'} の塗装機は未登録 | ${SITE_NAME}`;
+  const description = `${reg || 'この機体'} の特別塗装機はまだ登録されていません。あなたの投稿で登録できます。`;
   const submit = `/submit.html?reg=${encodeURIComponent(reg)}`;
   const html = `${head({ title, description, url: `${origin}/livery/${encodeURIComponent(reg)}`, image: `${origin}/api/og?reg=${encodeURIComponent(reg)}` })}
 <body>
@@ -142,10 +142,10 @@ function sendNotFound(res, reg, origin, why) {
 <main class="wrap">
   <div class="card">
     <h3>${safeReg || '登録記号が指定されていません'}</h3>
-    <p class="lead">この機体の特別塗装は見つかりませんでした（${escapeHtml(why)}）。<br>
-      承認済みの塗装だけを載せています。ご存じの塗装があれば登録してください。</p>
+    <p class="lead">この機体の特別塗装機は見つかりませんでした（${escapeHtml(why)}）。<br>
+      承認済みの塗装機だけを載せています。ご存じの塗装機があれば登録してください。</p>
     <div class="actions">
-      <a class="aw-btn gold" href="${escapeHtml(submit)}">この機体の塗装を登録する</a>
+      <a class="aw-btn gold" href="${escapeHtml(submit)}">この機体の塗装機を登録する</a>
       <a class="aw-btn" href="/liveries.html">特別塗装機の一覧</a>
     </div>
   </div>
@@ -164,7 +164,7 @@ function heroHtml(lv, photo) {
   if (!photo) {
     return `<div class="hero none">
       <span class="ph">✈</span>
-      <div class="cap">この塗装の写真はまだありません。<br>
+      <div class="cap">この塗装機の写真はまだありません。<br>
         <a class="aw-btn gold" href="/submit.html?reg=${encodeURIComponent(lv.reg)}">あなたの写真を載せませんか</a></div>
     </div>`;
   }
@@ -201,7 +201,7 @@ function infoHtml(lv) {
 function galleryHtml(lv, photos) {
   if (photos.length < 2) return '';
   return `<div class="gal">
-    <h2>この塗装の写真（${photos.length} 枚）</h2>
+    <h2>この塗装機の写真（${photos.length} 枚）</h2>
     <div class="grid">${photos.map((p) => `
       <a class="gi" href="${escapeHtml(p.url)}" target="_blank" rel="noopener" title="${escapeHtml(p.caption || lv.name)}">
         <img src="${escapeHtml(p.thumbUrl || p.url)}" alt="${escapeHtml(p.caption || lv.name)}" loading="lazy">
@@ -263,7 +263,7 @@ function sharePage(data, origin) {
   </div>
 
   <div class="card">
-    <h3>この塗装について</h3>
+    <h3>この塗装機について</h3>
     <div class="actions">
       <a class="aw-btn gold" href="/submit.html?reg=${escapeHtml(encodeURIComponent(data.reg))}">写真を投稿</a>
       <a class="aw-btn ghost" href="/submit.html?reg=${escapeHtml(encodeURIComponent(data.reg))}&amp;mode=fix">情報の修正を提案</a>
@@ -336,7 +336,7 @@ function clientScript() {
   function esc(s) { return window.AW ? AW.esc(s) : String(s == null ? '' : s); }
   function lv() { return BOOT.liveries[current] || BOOT.liveries[0]; }
 
-  // --- 塗装タブ（同じ登録記号に複数の塗装があるとき） ----------------------
+  // --- 塗装機タブ（同じ登録記号に複数の塗装機があるとき） ----------------------
   var tabs = document.querySelectorAll('.lvtabs button');
   Array.prototype.forEach.call(tabs, function (b) {
     b.addEventListener('click', function () {

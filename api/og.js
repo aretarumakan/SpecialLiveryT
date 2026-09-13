@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   });
   const png = Buffer.from(await image.arrayBuffer());
   res.setHeader('Content-Type', 'image/png');
-  // 画像は塗装が承認・差し替えられるまで変わらない。エッジで 1 時間持たせる
+  // 画像は塗装機が承認・差し替えられるまで変わらない。エッジで 1 時間持たせる
   res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
   res.status(200).send(png);
 }

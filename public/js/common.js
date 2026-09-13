@@ -18,7 +18,7 @@
 
   var NAV = [
     { href: '/', label: '空港' },
-    { href: '/liveries.html', label: '特別塗装' },
+    { href: '/liveries.html', label: '特別塗装機' },
     { href: '/submit.html', label: '投稿' },
     { href: '/me.html', label: 'マイページ' }
   ];
@@ -36,7 +36,7 @@
   /** 今のパスに当たるナビ項目を見つける */
   function currentHref() {
     var path = location.pathname.replace(/index\.html$/, '') || '/';
-    // 共有ページ /livery/:reg は一覧（特別塗装）の下位ページとして扱う
+    // 共有ページ /livery/:reg は一覧（特別塗装機）の下位ページとして扱う
     if (path.indexOf('/livery/') === 0) return '/liveries.html';
     var best = '/';
     for (var i = 0; i < NAV.length; i++) {

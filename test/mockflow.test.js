@@ -64,10 +64,10 @@ test('モックログイン: 一般ユーザーと管理者で role が変わる
   assert.equal(db.getSession(), null);
 });
 
-test('新しい塗装を登録すると pending でマイページに出る', () => {
+test('新しい塗装機を登録すると pending でマイページに出る', () => {
   const session = db.signIn('user1');
   const row = submitNewLivery(session, {
-    reg: 'ja820a', name: 'テスト塗装', airline: 'ANA', aircraft_type: 'B787-8',
+    reg: 'ja820a', name: 'テスト塗装機', airline: 'ANA', aircraft_type: 'B787-8',
     source_url: 'https://example.com/pr', note: 'テスト', since: '2026-04-01',
   });
   assert.equal(row.status, 'pending');          // 投稿直後は必ず承認待ち
@@ -77,18 +77,18 @@ test('新しい塗装を登録すると pending でマイページに出る', ()
 
   const mine = db.listMyLiveries('user1');
   assert.equal(mine.length, 1);
-  assert.equal(mine[0].name, 'テスト塗装');
+  assert.equal(mine[0].name, 'テスト塗装機');
   assert.equal(db.listMyLiveries('admin').length, 0);   // 他人の投稿は見えない
 });
 
-test('同じ機体・同じ塗装名の二重投稿を弾く（liveries_reg_name_uniq と同じ）', () => {
+test('同じ機体・同じ塗装機名の二重投稿を弾く（liveries_reg_name_uniq と同じ）', () => {
   const session = db.signIn('user1');
-  const form = { reg: 'JA820A', name: 'テスト塗装', source_url: 'https://example.com/pr' };
+  const form = { reg: 'JA820A', name: 'テスト塗装機', source_url: 'https://example.com/pr' };
   submitNewLivery(session, form);
   assert.throws(() => submitNewLivery(session, form), /すでに/);
 });
 
-test('既存の塗装に写真を追加 → サムネイルが出る → 削除できる', () => {
+test('既存の塗装機に写真を追加 → サムネイルが出る → 削除できる', () => {
   const session = db.signIn('user1');
   const livery = { id: 7, reg: 'JA819A', name: 'ピカチュウジェット NH', status: 'approved' };
   const photo = submitPhoto(session, livery, {

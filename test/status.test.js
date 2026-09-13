@@ -1,4 +1,4 @@
-// 特別塗装の DB 連携（lib/status.js）の単体テスト: node --test test/
+// 特別塗装機の DB 連携（lib/status.js）の単体テスト: node --test test/
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -11,11 +11,11 @@ const db = await import('../lib/db.js');
 
 const RJTT = AIRPORTS[0];
 
-/** DB から返ってくる形の塗装 1 件 */
+/** DB から返ってくる形の塗装機 1 件 */
 function dbLivery(over = {}) {
   return {
     id: 42, reg: 'JA819A', hex: null, name: 'ピカチュウジェット NH', name_en: null,
-    airline: 'ANA', type: 'B787-8', note: 'ポケモン特別塗装', color: '#f4c20d',
+    airline: 'ANA', type: 'B787-8', note: 'ポケモン特別塗装機', color: '#f4c20d',
     since: '2021-11-01', until: null, sourceUrl: 'https://example.com/press',
     photoUrl: 'https://db.example/storage/v1/object/public/livery-photos/u1/a.jpg',
     thumbUrl: 'https://db.example/storage/v1/object/public/livery-photos/u1/a_thumb.jpg',
@@ -48,7 +48,7 @@ test('specialView: 既存項目を保ったまま DB の写真情報を足す', 
 
   const fromDb = specialView(dbLivery());
   assert.deepEqual(fromDb, {
-    airline: 'ANA', type: 'B787-8', name: 'ピカチュウジェット NH', note: 'ポケモン特別塗装', color: '#f4c20d',
+    airline: 'ANA', type: 'B787-8', name: 'ピカチュウジェット NH', note: 'ポケモン特別塗装機', color: '#f4c20d',
     liveryId: 42,
     photoUrl: 'https://db.example/storage/v1/object/public/livery-photos/u1/a.jpg',
     thumbUrl: 'https://db.example/storage/v1/object/public/livery-photos/u1/a_thumb.jpg',
@@ -65,7 +65,7 @@ test('specialView: 既存項目を保ったまま DB の写真情報を足す', 
   assert.equal(fromStatic.credit, null);
 });
 
-test('getAirportStatus: 注入した塗装 DB の写真・liveryId が special に乗る', async () => {
+test('getAirportStatus: 注入した塗装機 DB の写真・liveryId が special に乗る', async () => {
   const res = await getAirportStatus('RJTT', {
     fetch: fakeFetch([parkedSpecial, parkedPlain]),
     getLiveries: async () => ({ JA819A: dbLivery() }),
@@ -74,15 +74,15 @@ test('getAirportStatus: 注入した塗装 DB の写真・liveryId が special �
   assert.equal(res.onGround.length, 2);
 
   const special = res.onGround.find((a) => a.reg === 'JA819A');
-  assert.ok(special.special, '特別塗装として判定されていない');
+  assert.ok(special.special, '特別塗装機として判定されていない');
   assert.equal(special.special.liveryId, 42);
   assert.equal(special.special.credit, '撮影者X');
   assert.ok(special.special.thumbUrl.endsWith('a_thumb.jpg'));
   assert.equal(special.special.name, 'ピカチュウジェット NH');
-  assert.equal(special.special.note, 'ポケモン特別塗装');
+  assert.equal(special.special.note, 'ポケモン特別塗装機');
   assert.equal(special.special.color, '#f4c20d');
 
-  // 特別塗装が先頭に来る（既存の並び順）
+  // 特別塗装機が先頭に来る（既存の並び順）
   assert.equal(res.onGround[0].reg, 'JA819A');
   assert.equal(res.onGround.find((a) => a.reg === 'JA801A').special, null);
 });
@@ -112,7 +112,7 @@ test('loadLiveryMap: 既定ではモック DB（11 件）を返す', async () =>
   assert.ok(typeof map.JA819A.id === 'number', 'モック DB 由来なので id がある');
 });
 
-test('classifyAircraft: 塗装辞書を渡さなければ静的辞書を使う', () => {
+test('classifyAircraft: 塗装機辞書を渡さなければ静的辞書を使う', () => {
   const c = classifyAircraft(RJTT, [parkedSpecial]);
   assert.equal(c.onGround.length, 1);
   assert.equal(c.onGround[0].special.name, 'ピカチュウジェット NH');

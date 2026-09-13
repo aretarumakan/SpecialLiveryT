@@ -1,7 +1,7 @@
 /**
  * GET /api/liveries?status=approved&airline=ANA&q=ピカチュウ&active=1
  *
- * 承認済みの特別塗装の一覧。写真は代表写真の URL を含む。
+ * 承認済みの特別塗装機の一覧。写真は代表写真の URL を含む。
  * このフェーズでは認証を扱わないため、status は approved のみ許可する
  * （pending / rejected の閲覧はフェーズ C の管理画面で Authorization 付きで行う）。
  */
@@ -39,6 +39,6 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(502).json({ error: `塗装データの取得に失敗しました: ${e.message}` });
+    return res.status(502).json({ error: `塗装機データの取得に失敗しました: ${e.message}` });
   }
 }

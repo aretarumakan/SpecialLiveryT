@@ -43,7 +43,7 @@ test('GET /api/liveries: 承認済み 11 件と航空会社チップ用の一覧
 
 test('GET /api/liveries: airline / q / active=1 が効く', async () => {
   db.mock.reset();
-  db.mock.addLivery({ reg: 'JA900X', name: '退役塗装', airline: 'ANA', status: 'approved', until_date: '2019-03-31' });
+  db.mock.addLivery({ reg: 'JA900X', name: '退役塗装機', airline: 'ANA', status: 'approved', until_date: '2019-03-31' });
 
   let r = res();
   await liveries({ query: { airline: 'ANA' } }, r);

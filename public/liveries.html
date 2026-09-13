@@ -53,7 +53,7 @@
 <main>
   <div class="tools">
     <div class="search">
-      <input id="q" type="search" inputmode="search" placeholder="登録記号・塗装名・機種で検索" autocomplete="off">
+      <input id="q" type="search" inputmode="search" placeholder="登録記号・塗装機名・機種で検索" autocomplete="off">
     </div>
     <div class="chips" id="chips"></div>
     <div class="opts">
@@ -71,7 +71,7 @@
 </footer>
 
 <script>
-  var ALL = [];          // 承認済み塗装の全件
+  var ALL = [];          // 承認済み塗装機の全件
   var airline = '';      // 選んでいる航空会社（空 = すべて）
   var qText = '';
   var activeOnly = true;
@@ -135,7 +135,7 @@
     elCount.textContent = items.length + ' 件 / 全 ' + ALL.length + ' 件';
     if (!items.length) {
       elList.innerHTML = '<div class="empty">条件に合う特別塗装機はありません。<br>'
-        + '<a href="/submit.html">新しい塗装を登録する</a></div>';
+        + '<a href="/submit.html">新しい塗装機を登録する</a></div>';
       return;
     }
     elList.innerHTML = items.map(card).join('');
@@ -162,7 +162,7 @@
     var href = '/livery/' + encodeURIComponent(it.reg);
     var meta = [it.airline, it.type].filter(Boolean).map(esc).join('・');
     var act = it.thumbUrl
-      ? '<a class="aw-btn" href="' + href + '">この塗装のページ</a>'
+      ? '<a class="aw-btn" href="' + href + '">この塗装機のページ</a>'
         + '<a class="aw-btn" href="/submit.html?reg=' + encodeURIComponent(it.reg) + '">写真を追加</a>'
       : '<a class="aw-btn gold" href="/submit.html?reg=' + encodeURIComponent(it.reg) + '">あなたの写真を載せませんか</a>';
 

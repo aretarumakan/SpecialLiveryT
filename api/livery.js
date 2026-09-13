@@ -2,7 +2,7 @@
  * GET /api/livery?reg=JA819A
  *
  * 共有ページ `/livery/:reg` のためのデータ。
- *   liveries … その登録記号の承認済み塗装（運航中が先頭。複数あればタブになる）
+ *   liveries … その登録記号の承認済み塗装機（運航中が先頭。複数あればタブになる）
  *   photos   … 承認済み写真（代表写真が先頭。撮影者名・SNS・撮影日・空港・説明つき）
  *   position … 現在地（lib/position.js が adsb.lol に 1 機だけ問い合わせる。20 秒キャッシュ）
  *
@@ -28,10 +28,10 @@ export default async function handler(req, res) {
   }
   if (!data.liveries.length) {
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(404).json({ error: `承認済みの塗装が見つかりません: ${reg}` });
+    return res.status(404).json({ error: `承認済みの塗装機が見つかりません: ${reg}` });
   }
 
-  // 現在地の取得に失敗しても塗装の情報は返す（position.state = 'unknown'）
+  // 現在地の取得に失敗しても塗装機の情報は返す（position.state = 'unknown'）
   const position = await getCurrentPosition(reg);
 
   res.setHeader('Cache-Control', 'public, s-maxage=20, stale-while-revalidate=10');

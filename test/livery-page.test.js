@@ -93,7 +93,7 @@ test('GET /livery/JA819A: 200 で og:* が入り、値はエスケープされ�
   assert.match(html, /adsb\.lol/);
 });
 
-test('GET /livery/:reg: 塗装名の危険な文字は HTML に生で出ない', async () => {
+test('GET /livery/:reg: 塗装機名の危険な文字は HTML に生で出ない', async () => {
   db.mock.reset();
   db.mock.addLivery({ reg: 'JA999X', name: '<script>alert(1)</script>', airline: 'ANA"x', status: 'approved' });
   const r = res();
@@ -108,7 +108,7 @@ test('GET /livery/ZZ999: 承認済みが無ければ 404 と「登録する」�
   const r = res();
   await handler(req('ZZ999'), r);
   assert.equal(r.code, 404);
-  assert.match(r.body, /この機体の塗装を登録する/);
+  assert.match(r.body, /この機体の塗装機を登録する/);
   assert.match(r.body, /\/submit\.html\?reg=ZZ999/);
   assert.match(r.body, /<meta name="twitter:card" content="summary_large_image">/);
 });
@@ -123,23 +123,23 @@ test('GET /livery/:reg: 形式が不正な登録記号も 404（例外にしな�
   }
 });
 
-test('GET /livery/:reg: 同じ登録記号に複数の塗装があるとタブが出て運航中が先頭', async () => {
+test('GET /livery/:reg: 同じ登録記号に複数の塗装機があるとタブが出て運航中が先頭', async () => {
   db.mock.reset();
-  db.mock.addLivery({ reg: 'JA819A', name: '旧塗装（終了）', airline: 'ANA', status: 'approved', since: '2015-01-01', until_date: '2020-03-31' });
+  db.mock.addLivery({ reg: 'JA819A', name: '旧塗装機（終了）', airline: 'ANA', status: 'approved', since: '2015-01-01', until_date: '2020-03-31' });
   const r = res();
   await handler(req('JA819A'), r);
   assert.equal(r.code, 200);
   assert.match(r.body, /class="tabs lvtabs"/);
   const first = r.body.indexOf('ピカチュウジェット NH');
-  const second = r.body.indexOf('旧塗装（終了）');
-  assert.ok(first > 0 && first < second, '運航中の塗装が先に来る');
+  const second = r.body.indexOf('旧塗装機（終了）');
+  assert.ok(first > 0 && first < second, '運航中の塗装機が先に来る');
 });
 
 // ---------------------------------------------------------------------------
 // GET /api/livery
 // ---------------------------------------------------------------------------
 
-test('GET /api/livery: 塗装・写真・現在地を返す（現在地の取得失敗は unknown）', async () => {
+test('GET /api/livery: 塗装機・写真・現在地を返す（現在地の取得失敗は unknown）', async () => {
   db.mock.reset();
   position.clearPositionCache();
   seedPhoto();

@@ -56,7 +56,7 @@ function writeJson(key, value) {
   try { backing().setItem(key, JSON.stringify(value)); } catch { /* 容量オーバーは黙って諦める */ }
 }
 
-// 塗装の id はサーバー側モック（lib/db.js の 11 件 = 1..11）と衝突しないよう 1000 から振る
+// 塗装機の id はサーバー側モック（lib/db.js の 11 件 = 1..11）と衝突しないよう 1000 から振る
 function emptyDb() {
   return { profiles: {}, liveries: [], photos: [], nextLivery: 1000, nextPhoto: 0 };
 }
@@ -195,7 +195,7 @@ function removeImage(path) {
 // ---------------------------------------------------------------------------
 
 /**
- * 塗装の登録（RLS と同じく status は pending・created_by は本人に固定する）。
+ * 塗装機の登録（RLS と同じく status は pending・created_by は本人に固定する）。
  * @param {Object} row validate.js の validateLiveryForm が作った行
  * @param {string} userId
  */
@@ -205,7 +205,7 @@ export function insertLivery(row, userId) {
   const dup = d.liveries.find(
     (r) => r.created_by === userId && r.reg === row.reg && r.name === row.name && r.status !== 'rejected'
   );
-  if (dup) throw new Error('同じ機体に同じ塗装名の投稿がすでにあります');
+  if (dup) throw new Error('同じ機体に同じ塗装機名の投稿がすでにあります');
   d.nextLivery += 1;
   const saved = {
     ...row,
@@ -227,7 +227,7 @@ export function insertLivery(row, userId) {
  */
 export function insertPhoto(row, ctx = {}) {
   if (!ctx.userId) throw new Error('ログインが必要です');
-  if (!ctx.livery || !ctx.livery.id) throw new Error('塗装が選ばれていません');
+  if (!ctx.livery || !ctx.livery.id) throw new Error('塗装機が選ばれていません');
   if (!row.storage_path || !row.thumb_path) throw new Error('storage のパスがありません');
   const d = db();
   d.nextPhoto += 1;
@@ -275,7 +275,7 @@ export function finalizePhoto(id, autoApprove) {
   return 'approved';
 }
 
-/** 自分が登録した塗装（新しい順） */
+/** 自分が登録した塗装機（新しい順） */
 export function listMyLiveries(userId) {
   return db().liveries
     .filter((r) => r.created_by === userId)

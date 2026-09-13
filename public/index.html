@@ -326,7 +326,7 @@
            esc(by) + ' / Planespotters.net の写真ページを開く">' + img + '</a>';
   }
   /**
-   * 特別塗装の代表写真（投稿 DB）。Planespotters より優先し、
+   * 特別塗装機の代表写真（投稿 DB）。Planespotters より優先し、
    * この枠は Planespotters の照会枠（1 更新 8 件）を消費しない。
    * タップで共有ページ /livery/{登録記号} に飛ばす（投稿の導線になる）。
    */
@@ -379,7 +379,7 @@
   function card(a, mode) {
     var cls = 'card' + (a.special ? ' special' : '');
     var badges = '';
-    if (a.special) badges += '<span class="badge gold">★ 特別塗装</span>';
+    if (a.special) badges += '<span class="badge gold">★ 特別塗装機</span>';
     if (a.phase === 'landing') badges += '<span class="badge green">着陸中</span>';
     if (a.phase === 'takeoff') badges += '<span class="badge blue">離陸中</span>';
     if (mode === 'ground' && !a.phase && a.gsKt > 5) badges += '<span class="badge">走行中</span>';
@@ -401,7 +401,7 @@
       routeTxt = '<div class="route">' + (a.route.origin ? esc(a.route.origin.name) + '（' + esc(a.route.origin.iata || a.route.origin.icao) + '）' : '?') +
                  ' → <b>' + (a.route.dest ? esc(a.route.dest.name) + '（' + esc(a.route.dest.iata || a.route.dest.icao) + '）' : '?') + '</b></div>';
     }
-    // 塗装名は共有ページへのリンク（写真の投稿・SNS 共有の入口）
+    // 塗装機名は共有ページへのリンク（写真の投稿・SNS 共有の入口）
     var specialTxt = '';
     if (a.special) {
       var lname = a.reg
