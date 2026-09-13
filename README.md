@@ -1,4 +1,4 @@
-# 空港ウォッチ（SpecialLiveryT）
+# スペマウォッチ（SpecialLiveryT）
 
 日本の空港を選ぶと「空港にいる機体」「到着予定」「出発直後」を 30 秒ごとに更新して表示するスマホ向け Web アプリ。
 特別塗装機（`lib/liveries.js` の `SPECIAL_LIVERIES`）は金色枠と説明付きでハイライトし、各機体の写真を右側に表示する。
@@ -14,7 +14,7 @@
 
 | パス | 役割 |
 |---|---|
-| `public/index.html` | 空港ウォッチの画面（静的）。`/api/status` を 30 秒ごとに fetch。機体写真は Planespotters API をブラウザから直接取得 |
+| `public/index.html` | スペマウォッチの画面（静的）。`/api/status` を 30 秒ごとに fetch。機体写真は Planespotters API をブラウザから直接取得 |
 | `public/liveries.html` | 承認済み特別塗装の一覧（検索・航空会社チップ・「運航中のみ」） |
 | `public/login.html` | ログイン（Google OAuth。モックではダミーユーザーの 2 ボタン）。初回は表示名の確認 |
 | `public/submit.html` | 投稿（(a) 新しい塗装を登録 / (b) 既存の塗装に写真を追加）。`public/js/upload.js` が処理 |
@@ -195,7 +195,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 
 | 部品 | 内容 |
 |---|---|
-| og:title | `{塗装名}（{登録記号}）\| 空港ウォッチ` |
+| og:title | `{塗装名}（{登録記号}）\| スペマウォッチ` |
 | og:description | `{航空会社} {機種}・{期間}・写真: {撮影者名}`（写真が無ければ「写真募集中」） |
 | og:image | `{絶対URL}/api/og?reg=`（`twitter:card` は `summary_large_image`） |
 | 本文 | 大きな代表写真（撮影者名・SNS リンク）／塗装情報・出典／今どこ？／ギャラリー（2 枚以上のとき）／共有・投稿・通報 |
@@ -212,7 +212,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 | `unknown` | 「現在地を取得できませんでした」（adsb.lol の障害・タイムアウト・429） |
 
 経路照会は `lib/status.js` の `lookupRoute()` を `/api/status` と共用する（adsbdb・6 時間キャッシュ）。
-X の投稿文は `✈ {塗装名}（{登録記号}）は今 {現在地}！ {URL} #空港ウォッチ #特別塗装機`。
+X の投稿文は `✈ {塗装名}（{登録記号}）は今 {現在地}！ {URL} #スペマウォッチ #特別塗装機`。
 現在地が分からないときは「は今 〜！」を落とす。
 
 **OG 画像（`/api/og`）**

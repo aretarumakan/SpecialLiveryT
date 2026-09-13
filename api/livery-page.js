@@ -17,7 +17,7 @@ import { getLiveryPageData } from '../lib/db.js';
 import { findAirport } from '../lib/airports.js';
 
 const REG_RE = /^[A-Z0-9]{1,2}-?[A-Z0-9]{2,5}$/;
-const SITE_NAME = '空港ウォッチ';
+const SITE_NAME = 'スペマウォッチ';
 
 export default async function handler(req, res) {
   const raw = String((req.query && req.query.reg) || '').trim();
@@ -274,7 +274,7 @@ function sharePage(data, origin) {
 </main>
 
 <footer>
-  <a href="/liveries.html">★ 特別塗装機の一覧</a>　<a href="/">空港ウォッチ</a><br>
+  <a href="/liveries.html">★ 特別塗装機の一覧</a>　<a href="/">スペマウォッチ</a><br>
   位置データ: <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>（ODbL）／
   経路: <a href="https://www.adsbdb.com" target="_blank" rel="noopener">adsbdb</a>／
   <a href="/terms.html">利用規約</a>
@@ -329,7 +329,7 @@ function clientScript() {
   return `(function () {
   'use strict';
   var BOOT = JSON.parse(document.getElementById('awLiveryBoot').textContent);
-  var HASH = ' #空港ウォッチ #特別塗装機';
+  var HASH = ' #スペマウォッチ #特別塗装機';
   var current = 0;
   var place = '';
 

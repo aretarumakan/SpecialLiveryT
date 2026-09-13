@@ -17,7 +17,7 @@
   var SUPABASE_ESM = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
   var NAV = [
-    { href: '/', label: '空港ウォッチ' },
+    { href: '/', label: '空港' },
     { href: '/liveries.html', label: '特別塗装' },
     { href: '/submit.html', label: '投稿' },
     { href: '/me.html', label: 'マイページ' }
@@ -53,7 +53,7 @@
     var el = document.createElement('div');
     el.className = 'aw-head';
     el.innerHTML =
-      '<div class="aw-top"><h1 class="aw-title"><a href="/">✈ ' + esc(title || '空港ウォッチ') + '</a></h1>' +
+      '<div class="aw-top"><h1 class="aw-title"><a href="/">✈ ' + esc(title || 'スペマウォッチ') + '</a></h1>' +
       '<span class="aw-user" id="awUser"></span></div>' +
       '<nav class="aw-nav">' + links + '</nav>';
     return el;
@@ -310,7 +310,7 @@
   // ---------------------------------------------------------------------------
 
   var script = document.currentScript;
-  var title = (script && script.dataset && script.dataset.title) || '空港ウォッチ';
+  var title = (script && script.dataset && script.dataset.title) || 'スペマウォッチ';
 
   var ready = fetch('/api/config', { cache: 'no-store' })
     .then(function (r) { return r.json(); })

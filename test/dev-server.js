@@ -238,7 +238,7 @@ if (isMain) {
   const server = await createServer();
   server.listen(port, () => {
     const mode = (process.env.MOCK_DB === '1' || !process.env.SUPABASE_URL) ? 'モック（lib/liveries.js の 11 件）' : 'Supabase';
-    console.log(`空港ウォッチ dev server  http://localhost:${port}`);
+    console.log(`スペマウォッチ dev server  http://localhost:${port}`);
     console.log(`  DB: ${mode}`);
     console.log(`  API: ${[...server.routes.keys()].map((n) => '/api/' + n).join('  ')}`);
   });

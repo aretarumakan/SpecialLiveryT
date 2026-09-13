@@ -53,7 +53,7 @@ test('periodText / metaFor: og:title と og:description（設計書 §4）', () 
   assert.equal(page.periodText({ ...lv, since: null }), '運航中');
 
   const withPhoto = page.metaFor(lv, { credit: '撮影者X' });
-  assert.equal(withPhoto.title, 'ピカチュウジェット NH（JA819A）| 空港ウォッチ');
+  assert.equal(withPhoto.title, 'ピカチュウジェット NH（JA819A）| スペマウォッチ');
   assert.equal(withPhoto.description, 'ANA B787-8・2021/11/01 〜 運航中・写真: 撮影者X');
   assert.match(page.metaFor(lv, null).description, /写真募集中$/);
 });
@@ -77,7 +77,7 @@ test('GET /livery/JA819A: 200 で og:* が入り、値はエスケープされ�
   assert.equal(r.code, 200);
   assert.equal(r.headers['Content-Type'], 'text/html; charset=utf-8');
   const html = r.body;
-  assert.match(html, /<meta property="og:title" content="ピカチュウジェット NH（JA819A）\| 空港ウォッチ">/);
+  assert.match(html, /<meta property="og:title" content="ピカチュウジェット NH（JA819A）\| スペマウォッチ">/);
   assert.match(html, /<meta property="og:description" content="ANA B787-8・[^"]*写真: 撮影者X">/);
   assert.match(html, /<meta property="og:image" content="https:\/\/example\.test\/api\/og\?reg=JA819A">/);
   assert.match(html, /<meta property="og:url" content="https:\/\/example\.test\/livery\/JA819A">/);
@@ -208,7 +208,7 @@ test('lib/og-render.js: 要素ツリーとサブセット文字（@vercel/og 抜
   assert.match(json, /JA819A/);
   assert.match(json, /https:\/\/db\.example\/a\.jpg/);
   // 描く文字はすべてサブセットに入っている（入っていないと豆腐になる）
-  for (const c of 'ピカチュウジェット NHJA819AANAB787-8撮影者X空港ウォッチ📷') {
+  for (const c of 'ピカチュウジェット NHJA819AANAB787-8撮影者Xスペマウォッチ📷') {
     assert.ok(text.includes(c), `サブセットに ${c} が無い`);
   }
   // data: URL や javascript: は背景に使わない
