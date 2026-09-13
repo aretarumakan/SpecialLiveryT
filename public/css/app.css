@@ -51,3 +51,67 @@ footer { font-size: 11px; color: var(--muted); padding: 16px 12px; text-align: c
   background: var(--panel2); color: var(--text); text-decoration: none; cursor: pointer; }
 .aw-btn.primary { background: var(--accent); color: #082f49; border-color: var(--accent); font-weight: 700; }
 .aw-btn.gold { background: var(--gold); color: #3b2f00; border-color: var(--gold); font-weight: 700; }
+
+/* -----------------------------------------------------------------------------
+   フォーム・カード（login / submit / me / terms で共用。フェーズ B）
+   ----------------------------------------------------------------------------- */
+.aw-head .aw-user a { color: var(--accent); text-decoration: none; margin-left: 6px; }
+.aw-head .aw-user .aw-mode { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px;
+  padding: 1px 7px; font-size: 10px; color: var(--muted); }
+
+main.wrap { padding: 10px 12px; max-width: 680px; margin: 0 auto; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+.card > h3 { margin: 0 0 8px; font-size: 15px; }
+.lead { font-size: 13px; color: var(--muted); line-height: 1.7; margin: 0 0 10px; }
+
+.field { display: grid; gap: 4px; margin-bottom: 10px; }
+.field > label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.field > label .req { color: var(--gold); margin-left: 3px; }
+.field input[type=text], .field input[type=url], .field input[type=date], .field input[type=search],
+.field select, .field textarea {
+  width: 100%; font-size: 16px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel2); color: var(--text); font-family: inherit; }
+.field input::placeholder, .field textarea::placeholder { color: #64748b; }
+.field input[type=color] { width: 56px; height: 36px; padding: 2px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); }
+.field textarea { min-height: 64px; resize: vertical; }
+.field .hint { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.field .bad { font-size: 12px; color: var(--red); }
+.field input.bad, .field select.bad, .field textarea.bad { border-color: var(--red); }
+.field.row { grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
+.field.row input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); }
+.field.row > label { font-size: 13px; color: var(--text); font-weight: 400; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+@media (max-width: 420px) { .cols { grid-template-columns: 1fr; } }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.aw-btn:disabled, .aw-btn[disabled] { opacity: .5; }
+.aw-btn.wide { width: 100%; text-align: center; padding: 12px; font-size: 15px; }
+.aw-btn.ghost { background: transparent; }
+.aw-btn.danger { background: #450a0a; color: #fecaca; border-color: #7f1d1d; }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.tabs button { flex: 1; padding: 9px 8px; font-size: 13px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--muted); }
+.tabs button.on { background: var(--accent); color: #082f49; border-color: var(--accent); font-weight: 700; }
+
+.badge.pending { background: #422006; color: #fcd34d; }
+.badge.approved { background: #14532d; color: var(--green); }
+.badge.rejected { background: #450a0a; color: #fecaca; }
+
+.plist { display: grid; gap: 8px; }
+.prow { display: grid; grid-template-columns: 96px 1fr; gap: 4px 10px; background: var(--panel2);
+  border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+.prow img { width: 96px; height: 64px; object-fit: cover; border-radius: 8px; background: #0b1220; grid-row: 1 / span 3; }
+.prow .ph { width: 96px; height: 64px; border-radius: 8px; background: #0b1220; display: flex; align-items: center;
+  justify-content: center; color: #475569; grid-row: 1 / span 3; }
+.prow .t { font-size: 14px; font-weight: 700; }
+.prow .s { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.prow .act { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.prow .why { grid-column: 1 / -1; font-size: 12px; background: #450a0a; color: #fecaca; padding: 6px 8px; border-radius: 8px; }
+
+.prose { font-size: 13px; line-height: 1.9; color: var(--text); }
+.prose h3 { font-size: 14px; margin: 18px 0 6px; color: var(--accent); }
+.prose ul { padding-left: 1.2em; margin: 6px 0; }
+.prose li { margin-bottom: 4px; }
+.prose p { margin: 6px 0; }
+.prose code { background: var(--panel2); padding: 1px 5px; border-radius: 5px; font-size: 12px; }

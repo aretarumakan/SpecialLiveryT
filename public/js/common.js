@@ -108,7 +108,7 @@
     return supabasePromise;
   }
 
-  /** ログイン中のユーザー（未ログイン・モックなら null） */
+  /** ログイン中のユーザー（未ログイン・モックなら null）。supabase の生の user を返す */
   function signedIn() {
     return getSupabase().then(function (sb) {
       if (!sb) return null;
@@ -116,14 +116,114 @@
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // セッション（モックと本物で同じ形）
+  // ---------------------------------------------------------------------------
+
+  /** モックストア（モックモードのときだけ読み込む） */
+  function getMockDb() {
+    if (!mockDbPromise) mockDbPromise = import('/js/mockdb.js');
+    return mockDbPromise;
+  }
+  var mockDbPromise = null;
+
+  /**
+   * profiles の行を取り、無ければ作る。
+   * 0001_init.sql の handle_new_user() が通常は作るが、
+   * トリガー導入前のユーザーのために保険を入れている（RLS: id = auth.uid() で insert 可）。
+   */
+  function ensureProfile(sb, user) {
+    return sb.from('profiles').select('id,display_name,sns_url,role').eq('id', user.id).maybeSingle()
+      .then(function (r) {
+        if (r.error) throw r.error;
+        if (r.data) return r.data;
+        var meta = user.user_metadata || {};
+        var name = meta.full_name || meta.name || (user.email || '').split('@')[0] || 'ユーザー';
+        return sb.from('profiles').insert({ id: user.id, display_name: name })
+          .select('id,display_name,sns_url,role').single()
+          .then(function (ins) {
+            if (ins.error) throw ins.error;
+            return ins.data;
+          });
+      });
+  }
+
+  /**
+   * 画面が使うセッション。モックでも本物でも同じ形を返す。
+   * @returns {Promise<{user:{id,email,displayName,snsUrl,role}, accessToken:string, mock:boolean}|null>}
+   */
+  function getSession() {
+    return ready.then(function () {
+      if (config.mock) {
+        return getMockDb().then(function (m) { return m.getSession(); });
+      }
+      return getSupabase().then(function (sb) {
+        if (!sb) return null;
+        return sb.auth.getSession().then(function (r) {
+          var s = r && r.data && r.data.session;
+          if (!s || !s.user) return null;
+          return ensureProfile(sb, s.user).then(function (p) {
+            return {
+              user: {
+                id: s.user.id,
+                email: s.user.email || null,
+                displayName: (p && p.display_name) || '',
+                snsUrl: (p && p.sns_url) || null,
+                role: (p && p.role) || 'user'
+              },
+              accessToken: s.access_token,
+              mock: false
+            };
+          });
+        });
+      }).catch(function (e) {
+        console.warn('セッションの取得に失敗しました', e);
+        return null;
+      });
+    });
+  }
+
+  /**
+   * ログインを要求する。未ログインなら /login.html?next=... に飛ばして null を返す。
+   * @param {string} [next] 戻り先（既定: 今のパス + クエリ）
+   */
+  function requireLogin(next) {
+    return getSession().then(function (session) {
+      if (session) return session;
+      var back = next || (location.pathname + location.search);
+      location.replace('/login.html?next=' + encodeURIComponent(back));
+      return null;
+    });
+  }
+
+  /** ログアウト（モックは localStorage のユーザーを消すだけ） */
+  function signOut() {
+    return ready.then(function () {
+      if (config.mock) return getMockDb().then(function (m) { m.signOut(); });
+      return getSupabase().then(function (sb) { return sb ? sb.auth.signOut() : null; });
+    });
+  }
+
   function showUser() {
     var slot = document.getElementById('awUser');
     if (!slot) return;
-    if (config.mock) { slot.textContent = 'モード: モック'; return; }
-    signedIn().then(function (user) {
-      if (!user) { slot.innerHTML = '<a href="/login.html?next=' + encodeURIComponent(location.pathname) + '">ログイン</a>'; return; }
-      var meta = user.user_metadata || {};
-      slot.textContent = meta.full_name || meta.name || (user.email || '').split('@')[0] || 'ログイン中';
+    getSession().then(function (session) {
+      var tag = config.mock ? 'モック' : '';
+      if (!session) {
+        slot.innerHTML = (tag ? '<span class="aw-mode">' + tag + '</span> ' : '')
+          + '<a href="/login.html?next=' + encodeURIComponent(location.pathname + location.search) + '">ログイン</a>';
+        return;
+      }
+      slot.innerHTML = (tag ? '<span class="aw-mode">' + tag + '</span> ' : '')
+        + '<a href="/me.html">' + esc(session.user.displayName || 'マイページ') + '</a>'
+        + ' <a href="#" id="awLogout">ログアウト</a>';
+      var out = document.getElementById('awLogout');
+      if (out) {
+        out.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          signOut().then(function () { location.href = '/'; });
+        });
+      }
     });
   }
 
@@ -151,5 +251,9 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 
-  window.AW = { config: config, ready: ready, getSupabase: getSupabase, signedIn: signedIn, toast: toast, esc: esc };
+  window.AW = {
+    config: config, ready: ready, getSupabase: getSupabase, signedIn: signedIn,
+    getSession: getSession, requireLogin: requireLogin, signOut: signOut,
+    refreshUser: showUser, toast: toast, esc: esc
+  };
 })();

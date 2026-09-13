@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>マイページ | 空港ウォッチ</title>
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  .s { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .note { font-size: 12px; padding: 8px 10px; border-radius: 8px; margin-bottom: 8px;
+    background: rgba(251,191,36,.12); color: #fde68a; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div id="aw-header"></div>
+<script src="/js/common.js" data-title="マイページ"></script>
+
+<main class="wrap">
+  <div id="bootErr" class="err" hidden></div>
+  <div id="gate" class="card"><p class="lead">ログインを確認しています…</p></div>
+
+  <div id="app" hidden>
+    <!-- プロフィール -->
+    <section class="card">
+      <h3>プロフィール</h3>
+      <p class="note">
+        表示名は写真のクレジットに使います。<b>すでに投稿した写真のクレジットは投稿時点の名前で固定</b>されるため、
+        ここで名前を変えても過去の写真の表示は変わりません（変更を反映したい場合は管理者にご連絡ください）。
+      </p>
+      <div class="field">
+        <label for="dispName">表示名<span class="req">*</span></label>
+        <input id="dispName" type="text" maxlength="40" autocomplete="nickname">
+        <div class="bad" id="dispNameErr" hidden></div>
+      </div>
+      <div class="field">
+        <label for="snsUrl">SNS の URL（任意・写真ページからリンクします）</label>
+        <input id="snsUrl" type="url" inputmode="url" placeholder="https://x.com/your_id">
+        <div class="bad" id="snsUrlErr" hidden></div>
+      </div>
+      <div class="actions">
+        <button type="button" class="aw-btn primary" id="btnSaveProfile">保存する</button>
+        <span class="s" id="profileState"></span>
+      </div>
+    </section>
+
+    <!-- 投稿した塗装 -->
+    <section class="card">
+      <h3>登録した塗装 <span class="badge" id="cntLiveries">0</span></h3>
+      <div id="liveryList"><div class="s">読み込み中…</div></div>
+    </section>
+
+    <!-- 投稿した写真 -->
+    <section class="card">
+      <h3>投稿した写真 <span class="badge" id="cntPhotos">0</span></h3>
+      <p class="s">写真はいつでも削除できます。削除すると Storage の画像も消え、代表写真だった場合は次に古い承認済みの写真が代表になります。</p>
+      <div id="photoList"><div class="s">読み込み中…</div></div>
+    </section>
+
+    <div class="actions" style="margin-bottom:16px">
+      <a class="aw-btn gold" href="/submit.html">新しく投稿する</a>
+      <a class="aw-btn ghost" href="/liveries.html">特別塗装の一覧</a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <a href="/terms.html">利用規約</a>　写真の著作権は撮影者に帰属します。<br>
+  位置データ: <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>（ODbL）
+</footer>
+
+<script type="module">
+import { validateDisplayName, validateSnsUrl } from '/js/validate.js';
+
+const BUCKET = 'livery-photos';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => AW.esc(s);
+
+const STATUS = {
+  pending: { label: '承認待ち', cls: 'pending' },
+  approved: { label: '承認済み', cls: 'approved' },
+  rejected: { label: '却下', cls: 'rejected' },
+};
+
+let session = null;
+let isMock = true;
+let mockdb = null;
+
+function badge(status) {
+  const s = STATUS[status] || { label: status || '不明', cls: '' };
+  return '<span class="badge ' + s.cls + '">' + esc(s.label) + '</span>';
+}
+
+function fail(e) {
+  const box = $('bootErr');
+  box.textContent = 'エラー: ' + (e && e.message ? e.message : e);
+  box.hidden = false;
+}
+
+async function sb() {
+  const client = await AW.getSupabase();
+  if (!client) throw new Error('Supabase に接続できません');
+  return client;
+}
+
+// --- 取得 -------------------------------------------------------------------
+
+async function fetchMyLiveries() {
+  if (isMock) return mockdb.listMyLiveries(session.user.id);
+  const client = await sb();
+  const { data, error } = await client.from('liveries')
+    .select('id,reg,name,airline,aircraft_type,since,until_date,source_url,status,reject_reason,created_at')
+    .eq('created_by', session.user.id)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchMyPhotos() {
+  if (isMock) return mockdb.listMyPhotos(session.user.id);
+  const client = await sb();
+  const { data, error } = await client.from('photos')
+    .select('id,livery_id,storage_path,thumb_path,credit_name,taken_on,airport_icao,caption,status,reject_reason,is_primary,created_at,liveries(reg,name)')
+    .eq('user_id', session.user.id)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const store = client.storage.from(BUCKET);
+  return (data || []).map((p) => ({
+    ...p,
+    livery: p.liveries ? { reg: p.liveries.reg, name: p.liveries.name } : null,
+    url: store.getPublicUrl(p.storage_path).data.publicUrl,
+    thumbUrl: store.getPublicUrl(p.thumb_path).data.publicUrl,
+  }));
+}
+
+// --- 描画 -------------------------------------------------------------------
+
+function renderLiveries(rows) {
+  $('cntLiveries').textContent = rows.length;
+  if (!rows.length) {
+    $('liveryList').innerHTML = '<div class="s">まだ登録はありません。'
+      + '<a href="/submit.html">新しい塗装を登録する</a></div>';
+    return;
+  }
+  $('liveryList').innerHTML = '<div class="plist">' + rows.map((r) =>
+    '<div class="prow" style="grid-template-columns:1fr">'
+    + '<div class="t">' + esc(r.name) + ' ' + badge(r.status) + '</div>'
+    + '<div class="s">' + esc(r.reg) + '　'
+      + esc([r.airline, r.aircraft_type].filter(Boolean).join('・'))
+      + (r.until_date ? '　' + esc(String(r.until_date)) + ' 運航終了' : '') + '</div>'
+    + '<div class="s">投稿: ' + esc(String(r.created_at || '').slice(0, 10)) + '</div>'
+    + (r.status === 'rejected' && r.reject_reason
+        ? '<div class="why">却下の理由: ' + esc(r.reject_reason) + '<br>理由を直して再投稿できます。</div>' : '')
+    + '<div class="act">'
+      + (r.status === 'approved'
+          ? '<a class="aw-btn" href="/submit.html?reg=' + encodeURIComponent(r.reg) + '">この塗装に写真を追加</a>'
+          : '')
+      + (r.status === 'rejected'
+          ? '<a class="aw-btn" href="/submit.html?reg=' + encodeURIComponent(r.reg) + '">再投稿する</a>'
+          : '')
+    + '</div>'
+    + '</div>').join('') + '</div>';
+}
+
+function renderPhotos(rows) {
+  $('cntPhotos').textContent = rows.length;
+  if (!rows.length) {
+    $('photoList').innerHTML = '<div class="s">まだ写真はありません。'
+      + '<a href="/submit.html">写真を投稿する</a></div>';
+    return;
+  }
+  $('photoList').innerHTML = '<div class="plist">' + rows.map((p) => {
+    const title = (p.livery && p.livery.name) || ('塗装 #' + p.livery_id);
+    const reg = (p.livery && p.livery.reg) || '';
+    return '<div class="prow">'
+      + (p.thumbUrl ? '<img src="' + esc(p.thumbUrl) + '" alt="" loading="lazy">' : '<div class="ph">✈</div>')
+      + '<div class="t">' + esc(title) + ' ' + badge(p.status)
+        + (p.is_primary ? '<span class="badge gold">代表写真</span>' : '') + '</div>'
+      + '<div class="s">' + esc(reg)
+        + (p.taken_on ? '　撮影: ' + esc(String(p.taken_on)) : '')
+        + (p.airport_icao ? '　' + esc(p.airport_icao) : '')
+        + '　クレジット: ' + esc(p.credit_name) + '</div>'
+      + '<div class="s">' + esc(p.caption || '') + '</div>'
+      + (p.status === 'rejected' && p.reject_reason
+          ? '<div class="why">却下の理由: ' + esc(p.reject_reason) + '</div>' : '')
+      + '<div class="act">'
+        + (p.url ? '<a class="aw-btn" href="' + esc(p.url) + '" target="_blank" rel="noopener">大きい画像</a>' : '')
+        + '<button type="button" class="aw-btn danger" data-del="' + p.id + '">削除</button>'
+      + '</div></div>';
+  }).join('') + '</div>';
+
+  for (const btn of $('photoList').querySelectorAll('[data-del]')) {
+    btn.addEventListener('click', () => removePhoto(Number(btn.dataset.del), rows, btn));
+  }
+}
+
+// --- 削除 -------------------------------------------------------------------
+
+async function removePhoto(id, rows, btn) {
+  const row = rows.find((r) => r.id === id);
+  if (!row) return;
+  if (!confirm('この写真を削除します。元に戻せません。よろしいですか？')) return;
+  btn.disabled = true;
+  try {
+    if (isMock) {
+      mockdb.deletePhoto(session.user.id, id);
+    } else {
+      const client = await sb();
+      // Storage → 行の順に消す（行が残って画像が無い状態を避ける）
+      const rm = await client.storage.from(BUCKET).remove([row.storage_path, row.thumb_path]);
+      if (rm.error) throw new Error('画像の削除に失敗しました: ' + rm.error.message);
+      const { error } = await client.from('photos').delete().eq('id', id);
+      if (error) throw new Error('写真の削除に失敗しました: ' + error.message);
+    }
+    AW.toast('写真を削除しました');
+    await loadLists();
+  } catch (e) {
+    fail(e);
+    btn.disabled = false;
+  }
+}
+
+// --- プロフィール -----------------------------------------------------------
+
+async function saveProfile() {
+  const name = validateDisplayName($('dispName').value);
+  const sns = validateSnsUrl($('snsUrl').value);
+  $('dispNameErr').hidden = name.ok;
+  $('dispNameErr').textContent = name.error || '';
+  $('dispName').classList.toggle('bad', !name.ok);
+  $('snsUrlErr').hidden = sns.ok;
+  $('snsUrlErr').textContent = sns.error || '';
+  $('snsUrl').classList.toggle('bad', !sns.ok);
+  if (!name.ok || !sns.ok) return;
+
+  const btn = $('btnSaveProfile');
+  btn.disabled = true;
+  try {
+    if (isMock) {
+      mockdb.updateProfile(session.user.id, { display_name: name.value, sns_url: sns.value });
+    } else {
+      const client = await sb();
+      const { error } = await client.from('profiles')
+        .update({ display_name: name.value, sns_url: sns.value })
+        .eq('id', session.user.id);
+      if (error) throw error;
+    }
+    session.user.displayName = name.value;
+    session.user.snsUrl = sns.value;
+    $('profileState').textContent = '保存しました';
+    AW.toast('プロフィールを保存しました');
+    AW.refreshUser();
+  } catch (e) {
+    fail(e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// --- 起動 -------------------------------------------------------------------
+
+async function loadLists() {
+  const [liveries, photos] = await Promise.all([
+    fetchMyLiveries().catch((e) => { fail(e); return []; }),
+    fetchMyPhotos().catch((e) => { fail(e); return []; }),
+  ]);
+  renderLiveries(liveries);
+  renderPhotos(photos);
+}
+
+async function start() {
+  await AW.ready;
+  isMock = AW.config.mock === true;
+  if (isMock) mockdb = await import('/js/mockdb.js');
+
+  session = await AW.requireLogin('/me.html');
+  if (!session) return;
+
+  $('gate').hidden = true;
+  $('app').hidden = false;
+  $('dispName').value = session.user.displayName || '';
+  $('snsUrl').value = session.user.snsUrl || '';
+  $('btnSaveProfile').addEventListener('click', saveProfile);
+  await loadLists();
+}
+
+start().catch(fail);
+</script>
+</body>
+</html>

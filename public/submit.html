@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>特別塗装機を投稿 | 空港ウォッチ</title>
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  .note { font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 8px;
+    background: rgba(251,191,36,.12); color: #fde68a; }
+  .s { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .prev { display: grid; gap: 4px; justify-items: start; }
+  .prev img { max-width: 200px; border-radius: 10px; border: 1px solid var(--line); }
+  .done { text-align: center; padding: 20px 10px; }
+  .done .big { font-size: 20px; font-weight: 700; color: var(--green); margin-bottom: 8px; }
+  fieldset { border: 1px dashed var(--line); border-radius: 12px; padding: 10px; margin: 12px 0 0; }
+  fieldset legend { font-size: 12px; color: var(--muted); padding: 0 6px; }
+</style>
+</head>
+<body>
+<div id="aw-header"></div>
+<script src="/js/common.js" data-title="投稿"></script>
+
+<main class="wrap">
+  <div id="bootErr" class="err" hidden></div>
+
+  <div id="gate" class="card">
+    <p class="lead">ログインを確認しています…</p>
+  </div>
+
+  <div id="app" hidden>
+    <div class="tabs" id="tabs">
+      <button type="button" id="tabNew" class="on">新しい塗装を登録</button>
+      <button type="button" id="tabPhoto">既存の塗装に写真を追加</button>
+    </div>
+
+    <!-- (a) 新しい塗装 ------------------------------------------------------ -->
+    <section class="card" id="secNew">
+      <h3>新しい特別塗装を登録する</h3>
+      <p class="lead">
+        1 行 = 1 塗装です。同じ機体が塗り替えられた場合は別の塗装として登録してください。<br>
+        投稿は管理者の承認後に公開されます。クレジット名は <b id="credit"></b> です。
+      </p>
+      <div class="err" hidden></div>
+
+      <div class="field">
+        <label for="fReg">登録記号<span class="req">*</span></label>
+        <input id="fReg" name="reg" type="text" inputmode="latin" autocapitalize="characters"
+               autocomplete="off" placeholder="JA819A" maxlength="8">
+        <div class="hint">機体に書かれている記号（例 JA819A / N12345 / B-18901）。入力欄から離れると既存の登録と機体情報を照会します。</div>
+        <div class="bad" data-e="reg" hidden></div>
+      </div>
+      <div id="regInfo"></div>
+
+      <div class="field">
+        <label for="fName">塗装名<span class="req">*</span></label>
+        <input id="fName" name="name" type="text" placeholder="ピカチュウジェット NH" maxlength="80">
+        <div class="bad" data-e="name" hidden></div>
+      </div>
+
+      <div class="field">
+        <label for="fNameEn">英語名（任意）</label>
+        <input id="fNameEn" name="name_en" type="text" placeholder="Pikachu Jet NH" maxlength="80">
+      </div>
+
+      <div class="cols">
+        <div class="field">
+          <label for="fAirline">航空会社</label>
+          <input id="fAirline" name="airline" type="text" placeholder="ANA" maxlength="40">
+        </div>
+        <div class="field">
+          <label for="fType">機種</label>
+          <input id="fType" name="aircraft_type" type="text" placeholder="B787-8" maxlength="40">
+        </div>
+      </div>
+
+      <div class="cols">
+        <div class="field">
+          <label for="fSince">運航開始日（任意）</label>
+          <input id="fSince" name="since" type="date">
+          <div class="bad" data-e="since" hidden></div>
+        </div>
+        <div class="field">
+          <label for="fUntil">運航終了日（空欄 = 運航中）</label>
+          <input id="fUntil" name="until_date" type="date">
+          <div class="bad" data-e="until_date" hidden></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="fSource">出典 URL<span class="req">*</span></label>
+        <input id="fSource" name="source_url" type="url" inputmode="url"
+               placeholder="https://www.ana.co.jp/...">
+        <div class="hint">航空会社のプレスリリースなど、公式の情報を推奨します。</div>
+        <div class="bad" data-e="source_url" hidden></div>
+      </div>
+
+      <div class="field">
+        <label for="fNote">一言説明（140 字以内）</label>
+        <textarea id="fNote" name="note" data-maxlen placeholder="ポケモン特別塗装"></textarea>
+        <div class="bad" data-e="note" hidden></div>
+      </div>
+
+      <div class="field row">
+        <input id="fColorUse" name="color_use" type="checkbox">
+        <label for="fColorUse">アクセント色を指定する</label>
+      </div>
+      <div class="field">
+        <label for="fColor">アクセント色（一覧の丸印に使います）</label>
+        <input id="fColor" name="color" type="color" value="#f4c20d">
+        <div class="bad" data-e="color" hidden></div>
+      </div>
+
+      <fieldset>
+        <legend>写真も一緒に投稿する（任意）</legend>
+        <div class="field">
+          <label for="nFile">写真</label>
+          <input id="nFile" type="file" accept="image/*">
+          <div class="hint">自分で撮影した写真のみ。長辺 1600px に縮小して送ります（元のファイルは送られません）。</div>
+          <div class="bad" data-e="file" hidden></div>
+        </div>
+        <div class="prev" id="nPreview"></div>
+        <div class="cols">
+          <div class="field">
+            <label for="nTaken">撮影日</label>
+            <input id="nTaken" name="taken_on" type="date">
+            <div class="bad" data-e="taken_on" hidden></div>
+          </div>
+          <div class="field">
+            <label for="nAirport">撮影空港</label>
+            <select id="nAirport" name="airport_icao"><option value="">（選択しない）</option></select>
+            <div class="bad" data-e="airport_icao" hidden></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="nCaption">キャプション（140 字以内）</label>
+          <input id="nCaption" name="caption" type="text" data-maxlen placeholder="羽田 D 滑走路にて">
+          <div class="bad" data-e="caption" hidden></div>
+        </div>
+        <div class="field row">
+          <input id="nAgree" name="agree" type="checkbox">
+          <label for="nAgree">自分で撮影した写真です。<a href="/terms.html" target="_blank" rel="noopener">利用規約</a>に同意します</label>
+        </div>
+        <div class="bad" data-e="agree" hidden></div>
+      </fieldset>
+
+      <div class="actions" style="margin-top:12px">
+        <button type="button" class="aw-btn primary wide" id="btnNewSubmit">この内容で投稿する</button>
+      </div>
+    </section>
+
+    <!-- (b) 既存の塗装に写真を追加 ----------------------------------------- -->
+    <section class="card" id="secPhoto" hidden>
+      <h3>既存の塗装に写真を追加する</h3>
+      <p class="lead">
+        承認済みの塗装を探して選び、自分で撮影した写真を投稿します。クレジットは <b>投稿時点の表示名</b> で固定されます。
+      </p>
+      <div class="err" hidden></div>
+
+      <div class="field">
+        <label for="pSearch">塗装を探す（登録記号・塗装名）</label>
+        <div style="display:flex; gap:6px">
+          <input id="pSearch" type="search" placeholder="JA819A / ピカチュウ" autocomplete="off">
+          <button type="button" class="aw-btn" id="btnPSearch">検索</button>
+        </div>
+      </div>
+      <div id="pResults"></div>
+      <div id="pSelected"></div>
+
+      <div class="field">
+        <label for="pFile">写真<span class="req">*</span></label>
+        <input id="pFile" type="file" accept="image/*">
+        <div class="hint">長辺 1600px と 320px の 2 枚に縮小してアップロードします。</div>
+        <div class="bad" data-e="file" hidden></div>
+      </div>
+      <div class="prev" id="pPreview"></div>
+
+      <div class="cols">
+        <div class="field">
+          <label for="pTaken">撮影日</label>
+          <input id="pTaken" name="taken_on" type="date">
+          <div class="bad" data-e="taken_on" hidden></div>
+        </div>
+        <div class="field">
+          <label for="pAirport">撮影空港</label>
+          <select id="pAirport" name="airport_icao"><option value="">（選択しない）</option></select>
+          <div class="bad" data-e="airport_icao" hidden></div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="pCaption">キャプション（140 字以内）</label>
+        <input id="pCaption" name="caption" type="text" data-maxlen placeholder="那覇空港 夕景">
+        <div class="bad" data-e="caption" hidden></div>
+      </div>
+      <div class="field row">
+        <input id="pAgree" name="agree" type="checkbox">
+        <label for="pAgree">自分で撮影した写真です。<a href="/terms.html" target="_blank" rel="noopener">利用規約</a>に同意します</label>
+      </div>
+      <div class="bad" data-e="agree" hidden></div>
+
+      <div class="actions" style="margin-top:12px">
+        <button type="button" class="aw-btn primary wide" id="btnPhotoSubmit">この写真を投稿する</button>
+      </div>
+    </section>
+
+    <!-- 送信後 -------------------------------------------------------------- -->
+    <section class="card" id="secDone" hidden>
+      <div class="done">
+        <div class="big" id="doneMsg">承認待ちです</div>
+        <p class="lead" id="doneExtra"></p>
+        <div class="actions" style="justify-content:center">
+          <a class="aw-btn primary" href="/me.html">マイページで状態を見る</a>
+          <a class="aw-btn" href="/submit.html">続けて投稿する</a>
+          <a class="aw-btn ghost" href="/liveries.html">一覧に戻る</a>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  投稿された写真の著作権は撮影者に帰属します。表示は常に撮影者名付きで、削除はマイページからいつでもできます。<br>
+  <a href="/terms.html">利用規約</a>　位置データ: <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>（ODbL）
+</footer>
+
+<script type="module" src="/js/upload.js"></script>
+</body>
+</html>
