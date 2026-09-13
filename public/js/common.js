@@ -36,6 +36,8 @@
   /** 今のパスに当たるナビ項目を見つける */
   function currentHref() {
     var path = location.pathname.replace(/index\.html$/, '') || '/';
+    // 共有ページ /livery/:reg は一覧（特別塗装）の下位ページとして扱う
+    if (path.indexOf('/livery/') === 0) return '/liveries.html';
     var best = '/';
     for (var i = 0; i < NAV.length; i++) {
       if (NAV[i].href !== '/' && path.indexOf(NAV[i].href) === 0) best = NAV[i].href;

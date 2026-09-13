@@ -7,7 +7,8 @@
 - 空港を URL で指定: `/#RJFF`（福岡）のようにハッシュで ICAO コードを付ける
 
 特別塗装機のリストは利用者の投稿で育てる（Supabase）。写真を投稿した人の名前が代表写真のクレジットに出る。
-詳細設計は `docs/design-crowd-livery.md`（現在フェーズ C まで実装済み＝投稿・マイページ・規約・管理画面。共有ページ `/livery/:reg` は D）。
+詳細設計は `docs/design-crowd-livery.md`（フェーズ A〜D をすべて実装済み＝一覧・投稿・管理画面・共有ページ）。
+塗装ごとの共有ページ `/livery/:reg` は OG 画像つきで SNS に貼れる。
 
 ## 構成
 
@@ -28,11 +29,16 @@
 | `api/status.js` | `GET /api/status?icao=RJTT`。`s-maxage=20` でエッジ共有 |
 | `api/config.js` | `GET /api/config` → `{ supabaseUrl, supabaseAnonKey, mock }`（`no-store`） |
 | `api/liveries.js` | `GET /api/liveries?airline=&q=&active=1` → 承認済み一覧（`s-maxage=60`） |
+| `api/livery.js` | `GET /api/livery?reg=` → 共有ページ用（塗装・承認済み写真・**現在地**。`s-maxage=20`） |
+| `api/livery-page.js` | `GET /livery/:reg` の HTML（og:* をサーバーで埋める。vercel.json の rewrite 経由） |
+| `api/og.js` | `GET /api/og?reg=` → 1200×630 の OG 画像（**Edge Function**・`@vercel/og`） |
 | `api/report.js` | `POST /api/report`（ログイン必須）。通報を登録。写真は未解決 3 件で自動的に承認待ちへ戻す |
 | `api/admin/*.js` | 管理 API（admin のみ）。`approve` / `pending` / `primary` / `reports` / `hex-fill` / `sweep` / `credit-backfill` |
 | `lib/auth.js` | 呼び出し元の本人確認。`Bearer <JWT>` を Supabase Auth に検証させて `profiles.role` を見る（モックは `Bearer mock:<id>`） |
 | `lib/admin.js` | 管理バッチ（adsbdb で hex 補完・Storage の孤児ファイル掃除）。fetch を差し替えられる |
-| `lib/status.js` | 取得・判定ロジック（adsb.lol → adsb.fi フォールバック、adsbdb 経路、駐機/到着/出発の判定） |
+| `lib/status.js` | 取得・判定ロジック（adsb.lol → adsb.fi フォールバック、adsbdb 経路、駐機/到着/出発の判定）。`lookupRoute()` を公開 |
+| `lib/position.js` | 1 機だけの現在地（adsb.lol `/v2/reg/{reg}`）。駐機中/飛行中/受信なし/不明 + 最寄り空港・経路・到着まで |
+| `lib/og-render.js` | OG 画像の要素ツリーと日本語フォントのサブセット取得（`@vercel/og` は import しない） |
 | `lib/db.js` | 塗装 DB のアクセス層。Supabase（PostgREST に素の fetch）とメモリ内モックを同じ関数で提供 |
 | `lib/airports.js` | 日本の主要 45 空港（ICAO/IATA/座標/空港とみなす半径） |
 | `lib/liveries.js` | 特別塗装機の初期データ・航空会社名・機種名の辞書 |
@@ -49,7 +55,9 @@
 |---|---|---|
 | 機体位置・登録記号・機種 | [adsb.lol](https://adsb.lol)（ADS-B） | 障害時は [adsb.fi](https://adsb.fi) に自動フォールバック |
 | 便名 → 出発地/目的地 | [adsbdb](https://www.adsbdb.com) | 便名ごとに 6 時間キャッシュ |
-| 機体写真 | [Planespotters.net](https://www.planespotters.net) 公開 API | ブラウザから直接取得。撮影者クレジット表示が利用条件。30 秒あたり新規 8 件に制限（緩めるとブロックされる） |
+| 機体写真（一般機） | [Planespotters.net](https://www.planespotters.net) 公開 API | ブラウザから直接取得。撮影者クレジット表示が利用条件。30 秒あたり新規 8 件に制限（緩めるとブロックされる） |
+| 1 機の現在地 | adsb.lol `/v2/reg/{reg}` | 共有ページの「今どこ？」。登録記号ごとに 20 秒キャッシュ（短時間に連投すると 429 が返る） |
+| 日本語フォント | Google Fonts CSS API（`text=` サブセット） | OG 画像用。描く文字だけの TTF（10〜20KB）をリクエスト時に取得しメモリに保持 |
 
 ※ いずれも個人・非商用での利用を前提にした条件。有料化する場合は `docs/research-data-sources.md` を参照。
 
@@ -61,6 +69,7 @@
 ## 開発
 
 ```
+npm install               # @vercel/og（OG 画像）だけ。node_modules はコミットしない
 npm run dev               # モックDBで http://localhost:3000（依存なしの test/dev-server.js）
 npm test                  # 単体テスト = node --test test/（ネットワーク不要）
 node test/run.js RJTT     # API ロジックを実データで確認（外部 API を叩く）
@@ -68,7 +77,9 @@ npm run dev:supabase      # 環境変数の Supabase に接続して起動
 npx vercel dev            # Vercel 相当（vercel CLI が必要）
 ```
 
-`npm run dev` はモックモードなので Supabase が無くても全画面が開ける。
+`npm run dev` はモックモードなので Supabase が無くても全画面が開ける（`MOCK_SEED_PENDING=1` が
+承認待ちのダミーと、JA819A の承認済み写真 1 枚＝data URL の SVG を入れるので共有ページも絵が出る）。
+`/api/og` だけはプレースホルダの SVG（下の「共有ページ」を参照）。
 `node --test test/` は `test/index.js` を入口に各 `*.test.js` を読み込む
 （Node 22 の test runner は位置引数のディレクトリを展開しないため）。
 
@@ -82,7 +93,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 | `SUPABASE_ANON_KEY` | 本番のみ | 公開可。`/api/config` 経由でブラウザに渡す |
 | `SUPABASE_SERVICE_ROLE_KEY` | 本番のみ | サーバー専用。承認・却下 API だけが使う |
 | `MOCK_DB` | 任意 | `1` にすると `SUPABASE_URL` があってもモックで動く |
-| `MOCK_SEED_PENDING` | 任意 | `1` でモックに承認待ちのダミー（塗装2・写真2・通報1）を入れる。`npm run dev` が自動で付ける |
+| `MOCK_SEED_PENDING` | 任意 | `1` でモックにダミーを入れる（承認待ち: 塗装2・写真2・通報1／承認済み: JA819A の写真1）。`npm run dev` が自動で付ける |
 
 コードパスの分岐は `lib/db.js`（サーバー側）と `public/js/common.js`（ブラウザ側）の 2 箇所で判定し、
 投稿画面はその結果（`AW.config.mock`）を見て `public/js/mockdb.js` か supabase-js のどちらかを呼ぶ。
@@ -143,6 +154,52 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 - **孤児掃除**: `photos.storage_path` / `thumb_path` と突き合わせて参照の無いファイルを消す。
   投稿中のファイルを巻き込まないよう、作成から 1 時間未満のファイルは対象外
 - 承認待ちの行は RLS では読めないため、管理 API だけは service role キーで読み書きする
+
+### 共有ページ（フェーズ D）
+
+`/livery/:reg` は塗装 1 件ぶんの共有ページ。SNS のクローラは JS を実行しないので、
+`<head>` の `og:*` と本文は **`api/livery-page.js` がサーバー側で描く**。
+ブラウザ側の JS は「今どこ？」のポーリング・タブ切り替え・共有ボタン・通報だけを担当する。
+
+| 部品 | 内容 |
+|---|---|
+| og:title | `{塗装名}（{登録記号}）\| 空港ウォッチ` |
+| og:description | `{航空会社} {機種}・{期間}・写真: {撮影者名}`（写真が無ければ「写真募集中」） |
+| og:image | `{絶対URL}/api/og?reg=`（`twitter:card` は `summary_large_image`） |
+| 本文 | 大きな代表写真（撮影者名・SNS リンク）／塗装情報・出典／今どこ？／ギャラリー（2 枚以上のとき）／共有・投稿・通報 |
+| 未登録の登録記号 | **404** を返し「この機体の塗装を登録する」（`/submit.html?reg=`）へ誘導 |
+| 複数の塗装 | 同じ登録記号に複数あればタブ表示（運航中 → 新しい順） |
+
+**今どこ？**（`GET /api/livery?reg=` の `position`。`lib/position.js`）
+
+| state | 表示 |
+|---|---|
+| `ground` | 「{空港名}（{IATA}）に駐機中」。タップで `/#{ICAO}` へ。3nm より遠いときは空港名を出さず距離だけ |
+| `airborne` | 「{便名} {出発地}→{目的地} あと約 n 分」（目的地が国内 45 空港のときだけ残り時間を出す） |
+| `unseen` | 「現在は受信できません」 |
+| `unknown` | 「現在地を取得できませんでした」（adsb.lol の障害・タイムアウト・429） |
+
+経路照会は `lib/status.js` の `lookupRoute()` を `/api/status` と共用する（adsbdb・6 時間キャッシュ）。
+X の投稿文は `✈ {塗装名}（{登録記号}）は今 {現在地}！ {URL} #空港ウォッチ #特別塗装機`。
+現在地が分からないときは「は今 〜！」を落とす。
+
+**OG 画像（`/api/og`）**
+
+- `@vercel/og`（satori + resvg の wasm）を使う **Edge Function**。Node 専用の API を持つモジュール
+  （`lib/status.js` など）は読み込まない。`lib/db.js` は fetch だけなので Edge でも動く
+- JSX が使えない（ビルド無しの構成）ので、要素は `lib/og-render.js` の `h()` で
+  プレーンオブジェクトとして組む（satori は `{type, props}` をそのまま受け付ける）
+- **日本語**: `@vercel/og` の既定フォントはラテン文字だけなので、そのままでは豆腐（□）になる。
+  Google Fonts の CSS API に `text=`（描く文字だけ）を付けて TTF サブセットを取得し、
+  モジュールスコープに載せる。取得に失敗しても画像自体は出る（日本語は豆腐になる）
+- **ローカルでは描画できない**: `test/dev-server.js` に Edge Runtime は無く、
+  `@vercel/og` は素の Node の ESM から読み込めない（バンドル内で `fs` を動的 require し、
+  `.wasm` を import する）。そのため dev server は `runtime: 'edge'` を宣言したファイルを実行せず、
+  **プレースホルダの SVG** を返す。実物を見るには `npx vercel dev` か Vercel へのデプロイが必要
+
+**トップ画面との関係**: 特別塗装機のカードは DB の代表写真（`special.thumbUrl`）を優先し、
+その枠は Planespotters の照会枠（1 更新 8 件）を消費しない。写真がまだ無い特別塗装機は
+これまでどおり Planespotters にフォールバックする。カードの写真と塗装名は `/livery/{登録記号}` に飛ぶ。
 
 ### モックモードのログイン
 

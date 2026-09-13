@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/livery/:reg", "destination": "/api/livery-page?reg=:reg" }
+  ],
   "headers": [
     { "source": "/api/(.*)", "headers": [ { "key": "Access-Control-Allow-Origin", "value": "*" } ] }
   ]

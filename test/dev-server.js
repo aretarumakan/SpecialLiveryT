@@ -7,6 +7,8 @@
  *  - `public/` を静的配信（/ → public/index.html）
  *  - `api/*.js` の default export を `/api/<ファイル名>` にマウント（Vercel 互換の最小 shim）
  *  - `/livery/:reg` は api/livery-page.js があればそれに回す（フェーズ D）
+ *  - Edge Function（`export const config = { runtime: 'edge' }`）は実行できないので、
+ *    `/api/og` はプレースホルダの SVG を返す（フェーズ D）
  *
  * `node --test` からは import されるだけでサーバーは起動しない（下の isMain 判定）。
  */
@@ -92,6 +94,32 @@ export async function listApiRoutes(dir = API_DIR, prefix = '') {
   return out;
 }
 
+/**
+ * Edge Function かどうかをソースから判定する（import はしない）。
+ * `api/og.js` は `@vercel/og`（satori + resvg の wasm）を読み込み、Edge Runtime でしか動かないので、
+ * この簡易サーバーでは実行せずプレースホルダの SVG を返す。
+ */
+async function isEdgeFunction(file) {
+  try {
+    const src = await fsp.readFile(file, 'utf8');
+    return /runtime:\s*['"]edge['"]/.test(src);
+  } catch { return false; }
+}
+
+/** Edge Function の代わりに返す画像。何が起きているかを画像自体に書いておく */
+function edgePlaceholderSvg(route, query) {
+  const label = `/api/${route}${query ? '?' + query : ''}`;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <rect width="1200" height="10" fill="#fbbf24"/>
+  <text x="64" y="300" font-size="64" font-family="sans-serif" fill="#f8fafc">OG image placeholder</text>
+  <text x="64" y="370" font-size="32" font-family="monospace" fill="#94a3b8">${esc(label)}</text>
+  <text x="64" y="440" font-size="28" font-family="sans-serif" fill="#94a3b8">Edge Runtime is not available in test/dev-server.js</text>
+  <text x="64" y="486" font-size="28" font-family="sans-serif" fill="#94a3b8">Use \`npx vercel dev\` or a deployment to render the real image.</text>
+</svg>`;
+}
+
 async function loadHandler(file) {
   // キャッシュバスターは付けない（毎回 import すると ESM キャッシュに溜まるため）
   const mod = await import(pathToFileURL(file).href);
@@ -160,6 +188,13 @@ export async function createServer() {
       if (apiMatch) {
         const file = routes.get(apiMatch[1]);
         if (!file) { res.status(404).json({ error: `/api/${apiMatch[1]} はありません` }); return; }
+        if (await isEdgeFunction(file)) {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'image/svg+xml');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(edgePlaceholderSvg(apiMatch[1], url.searchParams.toString()));
+          return;
+        }
         await shimReq(req, url);
         const fn = await loadHandler(file);
         await fn(req, res);

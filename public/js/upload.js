@@ -546,8 +546,19 @@ async function start() {
   await loadAirports();
 
   // ?reg=XXXX … 承認済みの塗装があればモード (b)、無ければモード (a) に前入力
-  const reg = normalizeReg(new URLSearchParams(location.search).get('reg') || '');
-  if (reg) {
+  const params = new URLSearchParams(location.search);
+  const reg = normalizeReg(params.get('reg') || '');
+  // ?mode=fix … 共有ページの「情報の修正を提案」からの導線。案内だけ出して登録モードにする
+  const fixMode = params.get('mode') === 'fix';
+  if (fixMode) {
+    const note = $('fixNote');
+    if (note) note.hidden = false;
+  }
+  if (fixMode && reg) {
+    document.querySelector('#secNew input[name="reg"]').value = reg;
+    $('pSearch').value = reg;
+    setMode('new');
+  } else if (reg) {
     document.querySelector('#secNew input[name="reg"]').value = reg;
     $('pSearch').value = reg;
     const found = await findApproved(reg).catch(() => []);

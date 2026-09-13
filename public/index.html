@@ -9,11 +9,11 @@
 <title>空港ウォッチ</title>
 <link rel="stylesheet" href="/css/app.css">
 <style>
-  /* 共通のデザイントークン・土台は /css/app.css。ここはこの画面固有のレイアウトだけ。 */
-  header { position: sticky; top: 0; z-index: 10; background: rgba(15,23,42,.96); backdrop-filter: blur(6px);
-    border-bottom: 1px solid var(--line); padding: calc(8px + env(safe-area-inset-top)) 12px 8px; }
+  /* 共通のデザイントークン・土台は /css/app.css。ここはこの画面固有のレイアウトだけ。
+     ヘッダ（タイトル・ナビ・ログイン状態）は /js/common.js が挿入する .aw-head が担当し、
+     この画面の <header> は空港プルダウンと更新状況だけを持つ（375px でも 1 行に収まる）。 */
+  header { background: rgba(15,23,42,.96); border-bottom: 1px solid var(--line); padding: 0 12px 8px; }
   .row { display: flex; align-items: center; gap: 8px; }
-  h1 { font-size: 17px; margin: 0; white-space: nowrap; }
   select { flex: 1; min-width: 0; font-size: 16px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
     background: var(--panel); color: var(--text); appearance: none; -webkit-appearance: none; }
   .status { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 12px; color: var(--muted); }
@@ -57,9 +57,11 @@
 </style>
 </head>
 <body>
+<div id="aw-header"></div>
+<script src="/js/common.js" data-title="空港ウォッチ"></script>
+
 <header>
   <div class="row">
-    <h1>✈ 空港ウォッチ</h1>
     <select id="airport" aria-label="空港を選択"></select>
   </div>
   <div class="status">
@@ -84,9 +86,9 @@
 </main>
 
 <footer>
-  <a href="/liveries.html">★ 特別塗装機の一覧を見る</a><br>
-  30秒ごとに自動更新。位置データ: <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>（ADS-B）／経路: <a href="https://www.adsbdb.com" target="_blank" rel="noopener">adsbdb</a><br>
-  機体写真: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a>（写真をタップすると撮影者のページが開きます）<br>
+  <a href="/liveries.html">★ 特別塗装機の一覧を見る</a>　<a href="/submit.html">写真を投稿する</a><br>
+  30秒ごとに自動更新。位置データ: <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>（ADS-B・<a href="https://opendatacommons.org/licenses/odbl/" target="_blank" rel="noopener">ODbL</a>）／経路: <a href="https://www.adsbdb.com" target="_blank" rel="noopener">adsbdb</a><br>
+  機体写真: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a>（写真をタップすると撮影者のページが開きます）。★ の写真は投稿者の撮影（撮影者名を表示）<br>
   受信状況により表示されない機体もあります。到着予定の「推定」は飛行経路からの推測です。
 </footer>
 
@@ -323,8 +325,24 @@
     return '<a class="photo" href="' + esc(p.link) + '" target="_blank" rel="noopener noreferrer" title="' +
            esc(by) + ' / Planespotters.net の写真ページを開く">' + img + '</a>';
   }
+  /**
+   * 特別塗装の代表写真（投稿 DB）。Planespotters より優先し、
+   * この枠は Planespotters の照会枠（1 更新 8 件）を消費しない。
+   * タップで共有ページ /livery/{登録記号} に飛ばす（投稿の導線になる）。
+   */
+  function specialPhotoHtml(a) {
+    var s = a.special;
+    var href = '/livery/' + encodeURIComponent(a.reg || '');
+    var img = '<img src="' + esc(s.thumbUrl) + '" alt="' + esc(s.name) + '" loading="lazy">' +
+              (s.credit ? '<span class="cred">📷 ' + esc(s.credit) + '</span>' : '');
+    return '<a class="photo" href="' + esc(href) + '" title="' + esc(s.name) + ' の共有ページを開く">' + img + '</a>';
+  }
+
   /** カード右側の写真枠。未取得なら取得を予約し、まずはプレースホルダを返す */
   function photoBlock(a) {
+    if (a.special && a.special.thumbUrl && a.reg) {
+      return '<div class="photo-wrap">' + specialPhotoHtml(a) + '</div>';
+    }
     var key = photoKey(a);
     if (!key) return '<div class="photo-wrap">' + photoHtml('') + '</div>';
     photoEnqueue(key, photoReg(a), photoHex(a));
@@ -383,7 +401,15 @@
       routeTxt = '<div class="route">' + (a.route.origin ? esc(a.route.origin.name) + '（' + esc(a.route.origin.iata || a.route.origin.icao) + '）' : '?') +
                  ' → <b>' + (a.route.dest ? esc(a.route.dest.name) + '（' + esc(a.route.dest.iata || a.route.dest.icao) + '）' : '?') + '</b></div>';
     }
-    var specialTxt = a.special ? '<div class="special-note"><i style="background:' + esc(a.special.color) + '"></i>' + esc(a.special.name) + '　' + esc(a.special.note) + '</div>' : '';
+    // 塗装名は共有ページへのリンク（写真の投稿・SNS 共有の入口）
+    var specialTxt = '';
+    if (a.special) {
+      var lname = a.reg
+        ? '<a href="/livery/' + esc(encodeURIComponent(a.reg)) + '">' + esc(a.special.name) + '</a>'
+        : esc(a.special.name);
+      specialTxt = '<div class="special-note"><i style="background:' + esc(a.special.color) + '"></i>' +
+        lname + '　' + esc(a.special.note) + '</div>';
+    }
 
     return '<div class="' + cls + '">' +
       '<div class="reg">' + esc(a.reg || '(登録記号不明)') + badges + '</div>' +
