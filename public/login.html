@@ -46,12 +46,6 @@
            このサイトのアプリ名とドメインが出る（Supabase の xxxx.supabase.co ではない） -->
       <div id="gsiBtn"></div>
 
-      <!-- ?legacy=1 のときだけ出る旧方式（GIS が読み込めない環境の逃げ道） -->
-      <button class="aw-btn wide google" id="btnGoogle" type="button" hidden style="margin-top:8px">
-        <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.5 2.4 30.1 0 24 0 14.6 0 6.4 5.4 2.5 13.2l7.8 6.1C12.2 13.2 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-2.8-.4-4.1H24v8.4h12.5c-.3 2.1-1.6 5.2-4.7 7.3l7.6 5.9c4.5-4.2 6.7-10.3 6.7-17.5z"/><path fill="#FBBC05" d="M10.3 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.5 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2 1.4-4.8 2.4-8.3 2.4-6.4 0-11.8-3.7-13.7-8.9l-7.8 6.1C6.4 42.6 14.6 48 24 48z"/></svg>
-        Google でログイン（旧方式）
-      </button>
-
       <!-- X（Twitter）ログインは Supabase の Providers で有効化してから開放する
       <button class="aw-btn wide" id="btnX" type="button" style="margin-top:8px">X でログイン</button>
       -->
@@ -199,21 +193,6 @@ async function initGoogle() {
   }
   if (mock) return; // モックでは本物の Google ログインは動かさない
 
-  // ?legacy=1 … GIS が使えない環境向けの旧方式（Supabase 経由の OAuth リダイレクト）
-  if (new URLSearchParams(location.search).get('legacy') === '1') {
-    const btn = $('btnGoogle');
-    btn.hidden = false;
-    btn.addEventListener('click', async () => {
-      try {
-        const sb = await AW.getSupabase();
-        if (!sb) throw new Error('Supabase に接続できません（環境変数が未設定です）');
-        const redirectTo = location.origin + '/login.html?next=' + encodeURIComponent(nextPath());
-        const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
-        if (error) throw error;
-      } catch (e) { fail(e); }
-    });
-    return;
-  }
 
   try {
     await window.__gsiReady;

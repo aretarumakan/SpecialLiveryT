@@ -119,7 +119,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
   Supabase 経由のリダイレクト（`signInWithOAuth`）をやめたので、Google の同意画面には
   `xxxx.supabase.co` ではなく **アプリ名「スペマウォッチ」と自ドメイン**が出る。
   nonce は `public/js/nonce.js` が作り、**Google にはハッシュ（SHA-256 hex）・Supabase には生**を渡す。
-  設定手順は `supabase/README.md` の「3. 認証プロバイダ」。`/login.html?legacy=1` で旧方式（リダイレクト）にも落とせる
+  設定手順は `supabase/README.md` の「3. 認証プロバイダ」
 - 投稿はサーバー API を通さず、ブラウザから supabase-js で直接 insert / upload する。権限は RLS（`0001_init.sql`）と
   Storage ポリシー（`0002_storage.sql`）が守る。クライアントは RLS が要求する値（`status='pending'`、
   `created_by`／`user_id` = 自分、`is_primary=false`）をそのまま送る

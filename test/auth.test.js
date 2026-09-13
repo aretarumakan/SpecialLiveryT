@@ -94,12 +94,12 @@ test('login.html: inline script が構文エラーなし（node --check）', asy
   }
 });
 
-test('login.html: GIS を読み込み signInWithIdToken を呼ぶ（signInWithOAuth は legacy だけ）', async () => {
+test('login.html: GIS を読み込み signInWithIdToken を呼ぶ（signInWithOAuth は使わない）', async () => {
   const html = await fs.readFile(path.join(ROOT, 'public', 'login.html'), 'utf8');
   assert.match(html, /https:\/\/accounts\.google\.com\/gsi\/client/);
   assert.match(html, /google\.accounts\.id\.initialize/);
   assert.match(html, /google\.accounts\.id\.renderButton/);
   assert.match(html, /signInWithIdToken/);
   assert.match(html, /GOOGLE_CLIENT_ID/);
-  assert.equal((html.match(/signInWithOAuth/g) || []).length, 1); // ?legacy=1 の逃げ道のみ
+  assert.equal((html.match(/signInWithOAuth/g) || []).length, 0); // 旧方式（リダイレクト）は廃止
 });

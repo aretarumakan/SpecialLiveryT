@@ -46,7 +46,6 @@ Google の同意画面には **アプリ名「スペマウォッチ」と自分�
      - `https://special-livery-t.vercel.app`
      - `http://localhost:3000`（ローカル開発用）
    - **承認済みのリダイレクト URI は不要**（GIS はリダイレクトしない）。
-     `?legacy=1` の旧方式も使えるようにしておきたいときだけ
      `https://<ref>.supabase.co/auth/v1/callback` を足す
    - 出てきた **クライアント ID**（`…apps.googleusercontent.com`）と**クライアント シークレット**を控える
 
@@ -61,7 +60,7 @@ Authentication → **Providers → Google** を開いて:
    `Unacceptable audience in id_token` などで弾かれる）
 4. Authentication → **URL Configuration** の Site URL / Redirect URLs に Vercel の URL
    （例 `https://special-livery-t.vercel.app` と `http://localhost:3000`）を追加
-   （GIS ではリダイレクトしないが、メールリンクや `?legacy=1` のために入れておく）
+   （GIS ではリダイレクトしないが、メールリンク用に入れておく）
 
 ※「Skip nonce check」は **ON にしない**。このアプリは毎回 nonce を作り、Google にはその SHA-256（hex）を、
 Supabase には生の値を渡している（`public/js/nonce.js`）。
