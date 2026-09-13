@@ -14,3 +14,4 @@ import './status.test.js';
 import './api.test.js';
 import './validate.test.js';
 import './mockflow.test.js';
+import './admin.test.js';

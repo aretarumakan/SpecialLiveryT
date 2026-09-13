@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>管理 | 空港ウォッチ</title>
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  /* 共通のトークン・カード・バッジ・.plist/.prow は /css/app.css（me.html と同じ） */
+  .s { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .note { font-size: 12px; padding: 8px 10px; border-radius: 8px; margin-bottom: 8px;
+    background: rgba(251,191,36,.12); color: #fde68a; line-height: 1.6; }
+  .prow .kv { grid-column: 1 / -1; display: grid; grid-template-columns: 88px 1fr; gap: 2px 8px; font-size: 12px; }
+  .prow .kv dt { color: var(--muted); }
+  .prow .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .prow .why { background: #422006; color: #fcd34d; }
+  .tool { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--panel2); margin-bottom: 8px; }
+  .tool .t { font-size: 14px; font-weight: 700; }
+  .tool .out { font-size: 12px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .tool .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tool input[type=text] { flex: 1; min-width: 140px; font-size: 16px; padding: 8px 10px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle;
+    border: 1px solid rgba(255,255,255,.4); margin-right: 4px; }
+  .cnt { font-size: 12px; color: var(--muted); margin: 0 2px 8px; }
+</style>
+</head>
+<body>
+<div id="aw-header"></div>
+<script src="/js/common.js" data-title="管理"></script>
+
+<main class="wrap">
+  <div id="bootErr" class="err" hidden></div>
+  <div id="gate" class="card"><p class="lead">権限を確認しています…</p></div>
+
+  <div id="denied" class="card" hidden>
+    <h3>権限がありません</h3>
+    <p class="lead">この画面は管理者だけが使えます。<a href="/">空港ウォッチに戻る</a></p>
+  </div>
+
+  <div id="app" hidden>
+    <div class="cnt" id="summary"></div>
+
+    <section class="card">
+      <h3>承認待ちの塗装 <span class="badge" id="cntLiveries">0</span></h3>
+      <p class="s">承認すると一覧・空港ウォッチに出ます（`/api/status` のキャッシュで最大 60 秒遅れます）。却下は理由が必須です。</p>
+      <div id="liveryList"><div class="s">読み込み中…</div></div>
+    </section>
+
+    <section class="card">
+      <h3>承認待ちの写真 <span class="badge" id="cntPhotos">0</span></h3>
+      <p class="s">その塗装にまだ代表写真が無ければ、最初に承認した写真が自動で代表写真になります。</p>
+      <div id="photoList"><div class="s">読み込み中…</div></div>
+    </section>
+
+    <section class="card">
+      <h3>通報 <span class="badge" id="cntReports">0</span></h3>
+      <p class="s">未解決の通報です。写真は未解決の通報が 3 件たまると自動で承認待ちに戻ります（再判断してください）。</p>
+      <div id="reportList"><div class="s">読み込み中…</div></div>
+    </section>
+
+    <section class="card">
+      <h3>代表写真の差し替え</h3>
+      <p class="s">登録記号で承認済みの塗装を探し、その承認済み写真から代表写真を選びます。</p>
+      <div class="tool">
+        <div class="row">
+          <input id="primReg" type="text" inputmode="latin" autocapitalize="characters" autocomplete="off" placeholder="JA819A">
+          <button type="button" class="aw-btn primary" id="btnPrimSearch">探す</button>
+        </div>
+        <div class="out" id="primOut"></div>
+      </div>
+      <div id="primList"></div>
+    </section>
+
+    <section class="card">
+      <h3>ツール</h3>
+
+      <div class="tool">
+        <div class="t">hex（ICAO 24bit）の補完</div>
+        <div class="s">hex が空の塗装を adsbdb で引いて補完します（1 回 30 件まで）。</div>
+        <div class="row"><button type="button" class="aw-btn" id="btnHex">hex を補完する</button></div>
+        <div class="out" id="hexOut"></div>
+      </div>
+
+      <div class="tool">
+        <div class="t">孤児ファイルの掃除</div>
+        <div class="s">Storage（livery-photos）にあって写真の行から参照されていないファイルを消します。
+          投稿中の取りこぼしを避けるため、作成から 1 時間未満のファイルは対象外です。モックでは何もしません。</div>
+        <div class="row">
+          <button type="button" class="aw-btn" id="btnSweepDry">まず一覧だけ見る</button>
+          <button type="button" class="aw-btn danger" id="btnSweep">消す</button>
+        </div>
+        <div class="out" id="sweepOut"></div>
+      </div>
+
+      <div class="tool">
+        <div class="t">クレジットの再反映</div>
+        <div class="s">クレジットは投稿時点の表示名で固定しています。本人から改名の反映依頼があったときだけ、
+          そのユーザー id を入れて実行してください（過去の写真すべてが今の表示名になります）。</div>
+        <div class="row">
+          <input id="creditUser" type="text" autocomplete="off" placeholder="ユーザー id（UUID）">
+          <button type="button" class="aw-btn" id="btnCredit">再反映する</button>
+        </div>
+        <div class="out" id="creditOut"></div>
+      </div>
+    </section>
+
+    <div class="actions" style="margin-bottom:16px">
+      <button type="button" class="aw-btn" id="btnReload">再読み込み</button>
+      <a class="aw-btn ghost" href="/liveries.html">特別塗装の一覧</a>
+      <a class="aw-btn ghost" href="/me.html">マイページ</a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <a href="/terms.html">利用規約</a>　写真の著作権は撮影者に帰属します。<br>
+  位置データ: <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>（ODbL）／
+  機体情報: <a href="https://www.adsbdb.com" target="_blank" rel="noopener">adsbdb</a>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return AW.esc(s); };
+  var session = null;
+
+  function fail(e) {
+    var box = $('bootErr');
+    box.textContent = 'エラー: ' + (e && e.message ? e.message : e);
+    box.hidden = false;
+  }
+
+  // --- API --------------------------------------------------------------------
+
+  function api(path, opts) {
+    var o = opts || {};
+    var headers = AW.authHeaders(session);
+    if (o.body !== undefined) headers['Content-Type'] = 'application/json';
+    return fetch(path, {
+      method: o.method || 'GET',
+      headers: headers,
+      cache: 'no-store',
+      body: o.body === undefined ? undefined : JSON.stringify(o.body)
+    }).then(function (r) {
+      return r.text().then(function (text) {
+        var body = null;
+        try { body = text ? JSON.parse(text) : null; } catch (e) { body = { error: text }; }
+        if (!r.ok) throw new Error((body && body.error) || ('HTTP ' + r.status));
+        return body;
+      });
+    });
+  }
+
+  function busy(btn, fn) {
+    btn.disabled = true;
+    return fn().catch(function (e) { fail(e); AW.toast('失敗: ' + (e && e.message ? e.message : e)); })
+      .then(function () { btn.disabled = false; });
+  }
+
+  // --- 承認・却下 -------------------------------------------------------------
+
+  function decide(type, id, action) {
+    var reason = null;
+    if (action === 'reject') {
+      reason = window.prompt('却下の理由を書いてください（投稿者に表示されます・500 字以内）');
+      if (reason === null) return Promise.resolve(null);
+      reason = String(reason).trim();
+      if (!reason) { AW.toast('理由を入れてください'); return Promise.resolve(null); }
+    }
+    return api('/api/admin/approve', {
+      method: 'POST',
+      body: { type: type, id: id, action: action, reason: reason }
+    }).then(function (body) {
+      if (type === 'photo' && action === 'approve') {
+        AW.toast(body.primaryPhotoId === id ? '承認しました（この写真が代表写真になりました）' : '承認しました');
+      } else {
+        AW.toast(action === 'approve' ? '承認しました' : '却下しました');
+      }
+      return load();
+    });
+  }
+
+  // --- 描画 -------------------------------------------------------------------
+
+  var STATUS_LABEL = { pending: '承認待ち', approved: '承認済み', rejected: '却下' };
+
+  function row(parts) { return '<div class="prow">' + parts + '</div>'; }
+
+  function thumb(url) {
+    return url ? '<img src="' + esc(url) + '" alt="" loading="lazy">' : '<div class="ph">✈</div>';
+  }
+
+  function kv(pairs) {
+    var out = '';
+    for (var i = 0; i < pairs.length; i++) {
+      if (pairs[i][1] === null || pairs[i][1] === undefined || pairs[i][1] === '') continue;
+      out += '<dt>' + esc(pairs[i][0]) + '</dt><dd>' + pairs[i][1] + '</dd>';
+    }
+    return out ? '<dl class="kv">' + out + '</dl>' : '';
+  }
+
+  function actions(type, id) {
+    return '<div class="act">'
+      + '<button type="button" class="aw-btn primary" data-act="approve" data-type="' + type + '" data-id="' + id + '">承認</button>'
+      + '<button type="button" class="aw-btn danger" data-act="reject" data-type="' + type + '" data-id="' + id + '">却下</button>'
+      + '</div>';
+  }
+
+  function renderLiveries(rows) {
+    $('cntLiveries').textContent = rows.length;
+    if (!rows.length) { $('liveryList').innerHTML = '<div class="s">承認待ちの塗装はありません。</div>'; return; }
+    $('liveryList').innerHTML = '<div class="plist">' + rows.map(function (r) {
+      return row(
+        '<div class="ph">✈</div>'
+        + '<div class="t">' + (r.color ? '<i class="swatch" style="background:' + esc(r.color) + '"></i>' : '')
+          + esc(r.name) + ' <span class="badge pending">承認待ち</span></div>'
+        + '<div class="s">' + esc(r.reg) + '　' + esc([r.airline, r.type].filter(Boolean).join('・')) + '</div>'
+        + '<div class="s">投稿: ' + esc(r.createdByName || r.createdBy || '不明')
+          + '　' + esc(String(r.createdAt || '').slice(0, 10)) + '</div>'
+        + kv([
+          ['塗装名(英)', r.nameEn ? esc(r.nameEn) : null],
+          ['一言', r.note ? esc(r.note) : null],
+          ['期間', r.since || r.until ? esc((r.since || '?') + ' 〜 ' + (r.until || '運航中')) : null],
+          ['hex', r.hex ? esc(r.hex) : null],
+          ['色', r.color ? esc(r.color) : null],
+          ['出典', r.sourceUrl
+            ? '<a href="' + esc(r.sourceUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(r.sourceUrl) + '</a>'
+            : '<span style="color:var(--red)">なし（出典は必須です）</span>']
+        ])
+        + actions('livery', r.id)
+      );
+    }).join('') + '</div>';
+  }
+
+  function renderPhotos(rows) {
+    $('cntPhotos').textContent = rows.length;
+    if (!rows.length) { $('photoList').innerHTML = '<div class="s">承認待ちの写真はありません。</div>'; return; }
+    $('photoList').innerHTML = '<div class="plist">' + rows.map(function (p) {
+      var title = p.liveryName || ('塗装 #' + p.liveryId);
+      return row(
+        (p.url ? '<a class="thumbLink" href="' + esc(p.url) + '" target="_blank" rel="noopener">' + thumb(p.thumbUrl) + '</a>' : thumb(p.thumbUrl))
+        + '<div class="t">' + esc(title) + ' <span class="badge pending">承認待ち</span>'
+          + (p.liveryStatus && p.liveryStatus !== 'approved'
+              ? '<span class="badge rejected">塗装が' + esc(p.liveryStatus === 'pending' ? '承認待ち' : '却下') + '</span>' : '')
+          + '</div>'
+        + '<div class="s">' + esc(p.liveryReg || '') + '　クレジット: ' + esc(p.credit) + '</div>'
+        + '<div class="s">' + esc([p.takenOn ? '撮影 ' + p.takenOn : '', p.airport || ''].filter(Boolean).join('　')) + '</div>'
+        + kv([
+          ['キャプション', p.caption ? esc(p.caption) : null],
+          ['投稿者', esc((p.userName || '') + '（' + (p.userId || '') + '）')],
+          ['投稿日', esc(String(p.createdAt || '').slice(0, 10))],
+          ['パス', esc(p.storagePath || '')]
+        ])
+        + actions('photo', p.id)
+      );
+    }).join('') + '</div>';
+  }
+
+  function renderReports(rows) {
+    $('cntReports').textContent = rows.length;
+    if (!rows.length) { $('reportList').innerHTML = '<div class="s">未解決の通報はありません。</div>'; return; }
+    $('reportList').innerHTML = '<div class="plist">' + rows.map(function (r) {
+      var t = r.target || {};
+      return row(
+        thumb(t.thumbUrl)
+        + '<div class="t">' + esc(r.targetType === 'photo' ? '写真' : '塗装') + ' #' + esc(r.targetId)
+          + (t.status ? ' <span class="badge ' + esc(t.status) + '">' + esc(STATUS_LABEL[t.status] || t.status) + '</span>' : '') + '</div>'
+        + '<div class="s">' + esc(t.label || '（対象が見つかりません）') + '</div>'
+        + '<div class="s">通報者: ' + esc(r.reporterName || r.reporterId || '不明')
+          + '　' + esc(String(r.createdAt || '').slice(0, 16).replace('T', ' ')) + '</div>'
+        + '<div class="why">' + esc(r.reason) + '</div>'
+        + '<div class="act">'
+          + '<button type="button" class="aw-btn primary" data-resolve="' + r.id + '">解決にする</button>'
+          + (r.targetType === 'photo'
+              ? '<button type="button" class="aw-btn danger" data-act="reject" data-type="photo" data-id="' + r.targetId + '">この写真を却下</button>' : '')
+          + (r.targetType === 'livery'
+              ? '<button type="button" class="aw-btn danger" data-act="reject" data-type="livery" data-id="' + r.targetId + '">この塗装を却下</button>' : '')
+        + '</div>'
+      );
+    }).join('') + '</div>';
+  }
+
+  /** 承認・却下・解決のボタンをまとめて結線する */
+  function wire(container) {
+    var els = container.querySelectorAll('[data-act]');
+    for (var i = 0; i < els.length; i++) {
+      (function (btn) {
+        btn.addEventListener('click', function () {
+          busy(btn, function () { return decide(btn.dataset.type, Number(btn.dataset.id), btn.dataset.act); });
+        });
+      })(els[i]);
+    }
+    var rs = container.querySelectorAll('[data-resolve]');
+    for (var j = 0; j < rs.length; j++) {
+      (function (btn) {
+        btn.addEventListener('click', function () {
+          busy(btn, function () {
+            return api('/api/admin/reports', { method: 'POST', body: { id: Number(btn.dataset.resolve) } })
+              .then(function () { AW.toast('解決にしました'); return load(); });
+          });
+        });
+      })(rs[j]);
+    }
+  }
+
+  // --- 読み込み ---------------------------------------------------------------
+
+  function load() {
+    return api('/api/admin/pending').then(function (body) {
+      renderLiveries(body.liveries || []);
+      renderPhotos(body.photos || []);
+      renderReports(body.reports || []);
+      var c = body.counts || {};
+      $('summary').textContent = '承認待ち 塗装 ' + (c.liveries || 0) + ' 件 / 写真 ' + (c.photos || 0)
+        + ' 件　未解決の通報 ' + (c.reports || 0) + ' 件' + (body.mock ? '（モックモード）' : '');
+      wire($('app'));
+      $('bootErr').hidden = true;
+    });
+  }
+
+  // --- 代表写真の差し替え -----------------------------------------------------
+
+  function searchPrimary() {
+    var reg = $('primReg').value.trim().toUpperCase();
+    $('primList').innerHTML = '';
+    if (!reg) { $('primOut').textContent = '登録記号を入れてください'; return Promise.resolve(); }
+    $('primOut').textContent = '検索中…';
+    return api('/api/admin/primary?reg=' + encodeURIComponent(reg)).then(function (body) {
+      var items = body.items || [];
+      if (!items.length) { $('primOut').textContent = reg + ' の承認済み塗装は見つかりませんでした'; return; }
+      $('primOut').textContent = items.length + ' 件の塗装が見つかりました';
+      $('primList').innerHTML = items.map(function (l) {
+        var photos = l.photos || [];
+        return '<div class="tool"><div class="t">' + esc(l.name) + '（' + esc(l.reg) + '）</div>'
+          + (photos.length
+              ? '<div class="plist">' + photos.map(function (p) {
+                  return row(
+                    thumb(p.thumbUrl)
+                    + '<div class="t">写真 #' + p.id + (p.isPrimary ? ' <span class="badge gold">代表写真</span>' : '') + '</div>'
+                    + '<div class="s">クレジット: ' + esc(p.credit) + (p.takenOn ? '　撮影 ' + esc(p.takenOn) : '') + '</div>'
+                    + '<div class="act">'
+                      + (p.isPrimary ? '<span class="s">現在の代表写真です</span>'
+                                     : '<button type="button" class="aw-btn primary" data-prim="' + p.id + '">代表にする</button>')
+                      + (p.url ? ' <a class="aw-btn ghost" href="' + esc(p.url) + '" target="_blank" rel="noopener">大きい画像</a>' : '')
+                    + '</div>'
+                  );
+                }).join('') + '</div>'
+              : '<div class="s">承認済みの写真がありません。</div>')
+          + '</div>';
+      }).join('');
+
+      var btns = $('primList').querySelectorAll('[data-prim]');
+      for (var i = 0; i < btns.length; i++) {
+        (function (btn) {
+          btn.addEventListener('click', function () {
+            busy(btn, function () {
+              return api('/api/admin/primary', { method: 'POST', body: { photoId: Number(btn.dataset.prim) } })
+                .then(function () { AW.toast('代表写真を変えました'); return searchPrimary(); });
+            });
+          });
+        })(btns[i]);
+      }
+    });
+  }
+
+  // --- ツール -----------------------------------------------------------------
+
+  function runHexFill() {
+    $('hexOut').textContent = '実行中…（adsbdb に問い合わせます）';
+    return api('/api/admin/hex-fill', { method: 'POST', body: {} }).then(function (b) {
+      var lines = ['対象 ' + b.checked + ' 件 / 補完 ' + b.filled + ' 件'];
+      (b.items || []).forEach(function (i) { lines.push('  ' + i.reg + ': ' + (i.hex || i.note || '—')); });
+      (b.errors || []).forEach(function (e) { lines.push('  ' + e.reg + ': エラー ' + e.error); });
+      $('hexOut').textContent = lines.join('\n');
+      return load();
+    }, function (e) { $('hexOut').textContent = 'エラー: ' + e.message; throw e; });
+  }
+
+  function runSweep(dryRun) {
+    if (!dryRun && !window.confirm('参照されていないファイルを削除します。元に戻せません。よろしいですか？')) return Promise.resolve();
+    $('sweepOut').textContent = '実行中…';
+    return api('/api/admin/sweep', { method: 'POST', body: { dryRun: dryRun } }).then(function (b) {
+      if (b.skipped) { $('sweepOut').textContent = 'モックモードなので何もしませんでした。'; return; }
+      var lines = ['Storage ' + b.scanned + ' 件 / 参照あり ' + b.referenced + ' 件 / 孤児 ' + b.orphans.length + ' 件'
+        + (b.dryRun ? '（一覧のみ）' : ' → 削除 ' + b.deleted + ' 件')];
+      b.orphans.slice(0, 50).forEach(function (p) { lines.push('  ' + p); });
+      if (b.orphans.length > 50) lines.push('  …ほか ' + (b.orphans.length - 50) + ' 件');
+      $('sweepOut').textContent = lines.join('\n');
+    }, function (e) { $('sweepOut').textContent = 'エラー: ' + e.message; throw e; });
+  }
+
+  function runCredit() {
+    var userId = $('creditUser').value.trim();
+    if (!userId) { $('creditOut').textContent = 'ユーザー id を入れてください'; return Promise.resolve(); }
+    $('creditOut').textContent = '実行中…';
+    return api('/api/admin/credit-backfill', { method: 'POST', body: { userId: userId } }).then(function (b) {
+      $('creditOut').textContent = '「' + b.creditName + '」に ' + b.updated + ' 件のクレジットを更新しました。';
+    }, function (e) { $('creditOut').textContent = 'エラー: ' + e.message; throw e; });
+  }
+
+  // --- 起動 -------------------------------------------------------------------
+
+  function start() {
+    return AW.ready.then(function () {
+      return AW.requireLogin('/admin.html');
+    }).then(function (s) {
+      if (!s) return null;            // requireLogin が /login.html へ飛ばした
+      session = s;
+      $('gate').hidden = true;
+      if (session.user.role !== 'admin') { $('denied').hidden = false; return null; }
+      $('app').hidden = false;
+
+      $('btnReload').addEventListener('click', function () { busy($('btnReload'), load); });
+      $('btnPrimSearch').addEventListener('click', function () { busy($('btnPrimSearch'), searchPrimary); });
+      $('primReg').addEventListener('keydown', function (ev) { if (ev.key === 'Enter') $('btnPrimSearch').click(); });
+      $('btnHex').addEventListener('click', function () { busy($('btnHex'), runHexFill); });
+      $('btnSweepDry').addEventListener('click', function () { busy($('btnSweepDry'), function () { return runSweep(true); }); });
+      $('btnSweep').addEventListener('click', function () { busy($('btnSweep'), function () { return runSweep(false); }); });
+      $('btnCredit').addEventListener('click', function () { busy($('btnCredit'), runCredit); });
+      return load();
+    }).catch(fail);
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>

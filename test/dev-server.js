@@ -72,14 +72,22 @@ async function shimReq(req, url) {
   return req;
 }
 
-/** api/ 配下の .js を {name: importPath} で列挙 */
-export async function listApiRoutes() {
+/**
+ * api/ 配下の .js を {ルート名: importPath} で列挙する。
+ * サブディレクトリも辿るので `api/admin/approve.js` は `admin/approve`
+ * （= `/api/admin/approve`）になる。Vercel のファイル配置と同じ規則。
+ */
+export async function listApiRoutes(dir = API_DIR, prefix = '') {
   const out = new Map();
   let entries = [];
-  try { entries = await fsp.readdir(API_DIR, { withFileTypes: true }); } catch { return out; }
+  try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return out; }
   for (const e of entries) {
+    if (e.isDirectory()) {
+      for (const [k, v] of await listApiRoutes(path.join(dir, e.name), `${prefix}${e.name}/`)) out.set(k, v);
+      continue;
+    }
     if (!e.isFile() || !e.name.endsWith('.js')) continue;
-    out.set(e.name.replace(/\.js$/, ''), path.join(API_DIR, e.name));
+    out.set(prefix + e.name.replace(/\.js$/, ''), path.join(dir, e.name));
   }
   return out;
 }
@@ -148,7 +156,7 @@ export async function createServer() {
         return;
       }
 
-      const apiMatch = pathname.match(/^\/api\/([A-Za-z0-9_-]+)\/?$/);
+      const apiMatch = pathname.match(/^\/api\/([A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)\/?$/);
       if (apiMatch) {
         const file = routes.get(apiMatch[1]);
         if (!file) { res.status(404).json({ error: `/api/${apiMatch[1]} はありません` }); return; }

@@ -6,7 +6,8 @@
  *   <script src="/js/common.js" data-title="特別塗装機" data-nav="/liveries.html"></script>
  *   <script> AW.ready.then(function () { ... }); </script>
  *
- * 公開するもの: window.AW = { config, ready, getSupabase(), toast(msg), esc(s), signedIn() }
+ * 公開するもの: window.AW = { config, ready, getSupabase(), toast(msg), esc(s), signedIn(),
+ *                             getSession(), requireLogin(), signOut(), authHeaders(), report() }
  * Supabase が無い環境（モック）では getSupabase() は null を返す。
  * 環境による分岐はこのファイルと lib/db.js の 2 箇所だけに閉じている。
  */
@@ -204,11 +205,86 @@
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // 管理者向け（ナビの「管理」リンクと承認待ちバッジ）
+  // ---------------------------------------------------------------------------
+
+  /**
+   * API に添える Authorization ヘッダ。
+   * モックのトークンは `mock-<id>` で、lib/auth.js が `mock:` と `mock-` の両方を受ける。
+   */
+  function authHeaders(session) {
+    if (!session || !session.accessToken) return {};
+    return { Authorization: 'Bearer ' + session.accessToken };
+  }
+
+  /** admin だけに「管理」リンクを出し、承認待ち件数をバッジで添える */
+  function showAdminNav(session) {
+    if (!session || session.user.role !== 'admin') return;
+    var nav = document.querySelector('.aw-nav');
+    if (!nav || document.getElementById('awAdminLink')) return;
+    var a = document.createElement('a');
+    a.id = 'awAdminLink';
+    a.href = '/admin.html';
+    a.innerHTML = '管理<span class="badge" id="awAdminBadge" hidden>0</span>';
+    if (location.pathname.indexOf('/admin.html') === 0) a.className = 'on';
+    nav.appendChild(a);
+
+    fetch('/api/admin/pending', { headers: authHeaders(session), cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (body) {
+        var c = body && body.counts;
+        if (!c) return;
+        var n = (c.total || 0) + (c.reports || 0);
+        var badge = document.getElementById('awAdminBadge');
+        if (!badge) return;
+        badge.textContent = String(n);
+        badge.hidden = n === 0;
+        if (n > 0) badge.className = 'badge gold';
+      })
+      .catch(function () { /* バッジは出なくても困らない */ });
+  }
+
+  /**
+   * 通報（設計書 §5-4。写真は未解決 3 件で自動的に承認待ちへ戻る）。
+   * @param {'livery'|'photo'} type
+   * @param {number|string} id
+   * @returns {Promise<Object|null>} 送れたら API の応答、やめたら null
+   */
+  function report(type, id) {
+    return getSession().then(function (session) {
+      if (!session) {
+        location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+        return null;
+      }
+      var reason = window.prompt('通報の理由を書いてください（500 字以内）。\n内容は管理者だけが読みます。');
+      if (reason === null) return null;
+      reason = String(reason).trim();
+      if (!reason) { toast('理由を入れてください'); return null; }
+      var headers = authHeaders(session);
+      headers['Content-Type'] = 'application/json';
+      return fetch('/api/report', {
+        method: 'POST', headers: headers,
+        body: JSON.stringify({ targetType: type, targetId: id, reason: reason })
+      }).then(function (r) {
+        return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+      }).then(function (r) {
+        if (!r.ok) throw new Error((r.body && r.body.error) || '通報に失敗しました');
+        toast(r.body.hidden ? '通報しました（通報が重なったため非表示にしました）' : '通報しました。ありがとうございます');
+        return r.body;
+      }).catch(function (e) {
+        toast('通報に失敗しました: ' + (e && e.message ? e.message : e));
+        return null;
+      });
+    });
+  }
+
   function showUser() {
     var slot = document.getElementById('awUser');
     if (!slot) return;
     getSession().then(function (session) {
       var tag = config.mock ? 'モック' : '';
+      showAdminNav(session);
       if (!session) {
         slot.innerHTML = (tag ? '<span class="aw-mode">' + tag + '</span> ' : '')
           + '<a href="/login.html?next=' + encodeURIComponent(location.pathname + location.search) + '">ログイン</a>';
@@ -254,6 +330,7 @@
   window.AW = {
     config: config, ready: ready, getSupabase: getSupabase, signedIn: signedIn,
     getSession: getSession, requireLogin: requireLogin, signOut: signOut,
-    refreshUser: showUser, toast: toast, esc: esc
+    refreshUser: showUser, toast: toast, esc: esc,
+    authHeaders: authHeaders, report: report
   };
 })();

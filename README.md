@@ -7,7 +7,7 @@
 - 空港を URL で指定: `/#RJFF`（福岡）のようにハッシュで ICAO コードを付ける
 
 特別塗装機のリストは利用者の投稿で育てる（Supabase）。写真を投稿した人の名前が代表写真のクレジットに出る。
-詳細設計は `docs/design-crowd-livery.md`（現在フェーズ B まで実装済み＝投稿・マイページ・規約。管理画面と共有ページは C / D）。
+詳細設計は `docs/design-crowd-livery.md`（現在フェーズ C まで実装済み＝投稿・マイページ・規約・管理画面。共有ページ `/livery/:reg` は D）。
 
 ## 構成
 
@@ -18,15 +18,20 @@
 | `public/login.html` | ログイン（Google OAuth。モックではダミーユーザーの 2 ボタン）。初回は表示名の確認 |
 | `public/submit.html` | 投稿（(a) 新しい塗装を登録 / (b) 既存の塗装に写真を追加）。`public/js/upload.js` が処理 |
 | `public/me.html` | マイページ（自分の投稿と状態、写真の削除、表示名・SNS URL の編集） |
+| `public/admin.html` | 管理画面（admin のみ）。承認待ちの塗装・写真の承認／却下、通報、代表写真の差し替え、ツール |
 | `public/terms.html` | 利用規約・写真の取り扱い（連絡先は `【連絡先を記入】` を置換する） |
 | `public/css/app.css` | 共通のデザイントークン（CSS 変数）と土台・ナビ・トーストのスタイル |
-| `public/js/common.js` | 共通ヘッダ／ナビ、`/api/config` 取得、supabase-js の遅延読み込み、`window.AW`（`getSession` / `requireLogin` / `signOut`） |
+| `public/js/common.js` | 共通ヘッダ／ナビ、`/api/config` 取得、supabase-js の遅延読み込み、`window.AW`（`getSession` / `requireLogin` / `signOut` / `authHeaders` / `report`）。admin には「管理」リンクと承認待ちバッジを出す |
 | `public/js/upload.js` | 投稿画面の処理（既存塗装の照会・adsbdb 自動入力・Canvas 縮小・Storage upload・insert） |
 | `public/js/validate.js` | 入力検証の純関数（ブラウザと `node --test` で共用。登録記号・URL・日付・表示名） |
 | `public/js/mockdb.js` | モックモード用のクライアント側ストア（localStorage）。Supabase 無しで投稿の流れを試せる |
 | `api/status.js` | `GET /api/status?icao=RJTT`。`s-maxage=20` でエッジ共有 |
 | `api/config.js` | `GET /api/config` → `{ supabaseUrl, supabaseAnonKey, mock }`（`no-store`） |
 | `api/liveries.js` | `GET /api/liveries?airline=&q=&active=1` → 承認済み一覧（`s-maxage=60`） |
+| `api/report.js` | `POST /api/report`（ログイン必須）。通報を登録。写真は未解決 3 件で自動的に承認待ちへ戻す |
+| `api/admin/*.js` | 管理 API（admin のみ）。`approve` / `pending` / `primary` / `reports` / `hex-fill` / `sweep` / `credit-backfill` |
+| `lib/auth.js` | 呼び出し元の本人確認。`Bearer <JWT>` を Supabase Auth に検証させて `profiles.role` を見る（モックは `Bearer mock:<id>`） |
+| `lib/admin.js` | 管理バッチ（adsbdb で hex 補完・Storage の孤児ファイル掃除）。fetch を差し替えられる |
 | `lib/status.js` | 取得・判定ロジック（adsb.lol → adsb.fi フォールバック、adsbdb 経路、駐機/到着/出発の判定） |
 | `lib/db.js` | 塗装 DB のアクセス層。Supabase（PostgREST に素の fetch）とメモリ内モックを同じ関数で提供 |
 | `lib/airports.js` | 日本の主要 45 空港（ICAO/IATA/座標/空港とみなす半径） |
@@ -77,6 +82,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 | `SUPABASE_ANON_KEY` | 本番のみ | 公開可。`/api/config` 経由でブラウザに渡す |
 | `SUPABASE_SERVICE_ROLE_KEY` | 本番のみ | サーバー専用。承認・却下 API だけが使う |
 | `MOCK_DB` | 任意 | `1` にすると `SUPABASE_URL` があってもモックで動く |
+| `MOCK_SEED_PENDING` | 任意 | `1` でモックに承認待ちのダミー（塗装2・写真2・通報1）を入れる。`npm run dev` が自動で付ける |
 
 コードパスの分岐は `lib/db.js`（サーバー側）と `public/js/common.js`（ブラウザ側）の 2 箇所で判定し、
 投稿画面はその結果（`AW.config.mock`）を見て `public/js/mockdb.js` か supabase-js のどちらかを呼ぶ。
@@ -87,7 +93,7 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 `supabase/README.md` を参照（SQL の実行順、OAuth、admin 昇格の 1 行 SQL、Vercel の環境変数）。
 
 ## 特別塗装機の追加
-- 利用者: `/liveries.html` → 「あなたの写真を載せませんか」／`/submit.html` から投稿し、管理者が承認する（承認画面はフェーズ C）
+- 利用者: `/liveries.html` → 「あなたの写真を載せませんか」／`/submit.html` から投稿し、管理者が `/admin.html` で承認する
 - 初期データ: `lib/liveries.js` の `SPECIAL_LIVERIES`（`supabase/migrations/0001_init.sql` の seed と Supabase が無いときのフォールバックを兼ねる）
 
 ### 投稿のしくみ（フェーズ B）
@@ -101,14 +107,42 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
   `createImageBitmap(file, {imageOrientation:'from-image'})` で反映し、再圧縮で EXIF は落ちる。
   `_thumb.jpg` という命名はクライアント側の規約（DB では `thumb_path` 列に入るだけ）
 - `photos` の行は**両方の upload が成功してから** insert する。insert が失敗した場合は上げた画像を消すが、
-  ネットワークが切れた場合などは孤児ファイルが残りうる。
-  **TODO（フェーズ C の管理タスク）**: `storage.objects` と `photos.storage_path` を突き合わせて
-  参照の無いファイルを掃除する管理者向けの処理を用意する
+  ネットワークが切れた場合などは孤児ファイルが残りうる。これは `/admin.html` の
+  「孤児ファイルの掃除」（`POST /api/admin/sweep`）で回収する（フェーズ C で実装）
 - `credit_name` は**投稿時点の表示名で固定**する。あとでマイページで改名しても過去の写真のクレジットは変わらない
   （`/me.html` と `/terms.html` にその旨を明記している）
 - 登録記号を入れて欄から離れると、`/api/liveries?q=` で既存の承認済み塗装を照会し（あれば
   「この塗装に写真を追加」へ誘導）、`https://api.adsbdb.com/v0/aircraft/{reg}` をブラウザから直接引いて
   航空会社・機種を自動入力する（`access-control-allow-origin: *` を確認済みのためプロキシは不要）
+
+### 管理のしくみ（フェーズ C）
+
+`/admin.html` は **admin だけ**が開ける（`profiles.role = 'admin'`。昇格は `supabase/README.md` の SQL 1 行）。
+一般ユーザーが開くと「権限がありません」と出る。ヘッダの「管理」リンクと承認待ちバッジも admin にだけ出る。
+
+| エンドポイント | メソッド | 役割 |
+|---|---|---|
+| `/api/admin/pending` | GET | 承認待ちの塗装・写真（サムネイル付き）・未解決の通報・件数 |
+| `/api/admin/approve` | POST | `{type:'livery'\|'photo', id, action:'approve'\|'reject', reason?}`。却下は理由必須 |
+| `/api/admin/primary` | GET / POST | 登録記号で承認済み写真を一覧 / `{photoId}` を代表写真にする |
+| `/api/admin/reports` | GET / POST | 通報の一覧 / `{id}` を解決済みにする |
+| `/api/admin/hex-fill` | POST | hex が空の塗装を adsbdb `/v0/aircraft/{reg}` の `mode_s` で補完（1 回 30 件まで） |
+| `/api/admin/sweep` | POST | Storage の孤児ファイル掃除（`{dryRun:true}` で一覧だけ。モックは何もしない） |
+| `/api/admin/credit-backfill` | POST | `{userId}` のクレジットを今の表示名に付け替える（改名の反映依頼用） |
+| `/api/report` | POST | ログイン済みの誰でも。`{targetType, targetId, reason}` |
+
+- **認証**: ブラウザは `Authorization: Bearer <Supabase の access_token>` を付ける。`lib/auth.js` が
+  `${SUPABASE_URL}/auth/v1/user`（anon キー）にトークンを検証させ、service role キーで `profiles.role` を読む。
+  モックでは `Bearer mock:<userId>`（`public/js/mockdb.js` の `mock-<id>` も受ける）
+- **service role キーは RLS を素通りする**ので、入力は `lib/db.js` で必ず絞る
+  （id は 1 以上の整数、`type`/`action`/`targetType` は列挙、理由は 500 字以内、登録記号と hex は正規表現）
+- **代表写真**: 写真を承認すると `decide_primary()` が走り、その塗装に代表写真が無ければその写真が代表になる
+  （= 最初に承認された投稿者がサムネイル権を得る）。管理者は「代表写真の差し替え」で `set_primary_photo()` を呼べる
+- **通報**: 同じ写真に未解決の通報が 3 件たまると自動で `status='pending'`（非表示）に戻し、代表写真を繰り上げる。
+  管理者は `/admin.html` の「通報」で再判断して、却下するか「解決にする」
+- **孤児掃除**: `photos.storage_path` / `thumb_path` と突き合わせて参照の無いファイルを消す。
+  投稿中のファイルを巻き込まないよう、作成から 1 時間未満のファイルは対象外
+- 承認待ちの行は RLS では読めないため、管理 API だけは service role キーで読み書きする
 
 ### モックモードのログイン
 
@@ -116,7 +150,12 @@ npx vercel dev            # Vercel 相当（vercel CLI が必要）
 「モック: 一般ユーザーでログイン」「モック: 管理者でログイン」の 2 ボタンが出る。
 ログイン状態と投稿内容は `public/js/mockdb.js` が **localStorage**（`awMockUser` / `awMockDb` / `awMockThumbs`）に保存し、
 `/submit.html` → `/me.html`（承認待ちバッジ・サムネイル・削除）まで一通り触れる。サムネイルは data URL で残り、
-写真の本体はメモリのみなので再読み込みすると本体のリンクは消える。承認は行われない（フェーズ C）。
+写真の本体はメモリのみなので再読み込みすると本体のリンクは消える。
+
+**注意**: 投稿の保存先はブラウザの localStorage（`public/js/mockdb.js`）、管理 API が読むのは
+サーバープロセスのメモリ（`lib/db.js`）で、モックではこの 2 つがつながっていない。
+そのため `/admin.html` には `npm run dev`（`MOCK_SEED_PENDING=1`）が入れるダミーの承認待ちが出る。
+本番（Supabase）では同じ Postgres を見るので一続きになる。
 
 ## 経緯
 元は Google Apps Script の Web アプリとして作成したものを Vercel に移植した（判定ロジックは同一）。
