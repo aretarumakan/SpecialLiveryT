@@ -15,6 +15,6 @@
     "dev:vercel": "vercel dev"
   },
   "dependencies": {
-    "@vercel/og": "^1.0.2"
+    "@vercel/og": "^0.6.8"
   }
 }

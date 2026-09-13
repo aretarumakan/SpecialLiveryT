@@ -229,16 +229,12 @@ test('lib/og-render.js: フォント取得に失敗しても空配列（画像�
 });
 
 /**
- * api/og.js は Edge Runtime 専用。`@vercel/og` は node の ESM では読み込めない
- * （バンドルの中で fs を動的 require する・wasm を import する）ので、
- * import はせずソースの取り決めだけを確かめる。実物の描画は Vercel 上か
- * `npx vercel dev` で確認する（README「OG 画像」）。
+ * api/og.js は Node ランタイムで動かす（@vercel/og 1.x の Edge ビルドは Vercel の Edge Runtime に載らない）。
+ * ここでは取り決めだけを確かめる。実物の描画は test/og-render.smoke.js（ネットワーク要）で確認する。
  */
-test('api/og.js: Edge Runtime の宣言と、Node 専用モジュールを読み込んでいないこと', async () => {
+test('api/og.js: Node ランタイムで、lib/status.js を読み込んでいないこと', async () => {
   const src = await readFile(new URL('../api/og.js', import.meta.url), 'utf8');
-  assert.match(src, /export const config = \{ runtime: 'edge' \}/);
+  assert.ok(!/runtime:\s*['"]edge['"]/.test(src));
   assert.match(src, /from '@vercel\/og'/);
-  // lib/status.js は node の fetch 以外にも依存するので Edge では読み込まない取り決め
   assert.ok(!/from '\.\.\/lib\/status\.js'/.test(src));
-  assert.ok(!/from 'node:/.test(src));
 });

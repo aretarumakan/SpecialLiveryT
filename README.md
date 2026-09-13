@@ -31,7 +31,7 @@
 | `api/liveries.js` | `GET /api/liveries?airline=&q=&active=1` → 承認済み一覧（`s-maxage=60`） |
 | `api/livery.js` | `GET /api/livery?reg=` → 共有ページ用（塗装・承認済み写真・**現在地**。`s-maxage=20`） |
 | `api/livery-page.js` | `GET /livery/:reg` の HTML（og:* をサーバーで埋める。vercel.json の rewrite 経由） |
-| `api/og.js` | `GET /api/og?reg=` → 1200×630 の OG 画像（**Edge Function**・`@vercel/og`） |
+| `api/og.js` | `GET /api/og?reg=` → 1200×630 の OG 画像（Node Function・`@vercel/og` 0.6 系。1.x は Edge/Node とも Vercel で動かないため固定） |
 | `api/report.js` | `POST /api/report`（ログイン必須）。通報を登録。写真は未解決 3 件で自動的に承認待ちへ戻す |
 | `api/admin/*.js` | 管理 API（admin のみ）。`approve` / `pending` / `primary` / `reports` / `hex-fill` / `sweep` / `credit-backfill` |
 | `lib/auth.js` | 呼び出し元の本人確認。`Bearer <JWT>` を Supabase Auth に検証させて `profiles.role` を見る（モックは `Bearer mock:<id>`） |

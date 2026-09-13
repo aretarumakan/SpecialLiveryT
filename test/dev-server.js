@@ -7,7 +7,7 @@
  *  - `public/` を静的配信（/ → public/index.html）
  *  - `api/*.js` の default export を `/api/<ファイル名>` にマウント（Vercel 互換の最小 shim）
  *  - `/livery/:reg` は api/livery-page.js があればそれに回す（フェーズ D）
- *  - Edge Function（`export const config = { runtime: 'edge' }`）は実行できないので、
+ *  - Edge Function（`export const config = { runtime: 'edge' }`）があれば実行せず
  *    `/api/og` はプレースホルダの SVG を返す（フェーズ D）
  *
  * `node --test` からは import されるだけでサーバーは起動しない（下の isMain 判定）。

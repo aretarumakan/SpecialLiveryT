@@ -1,21 +1,16 @@
 /**
  * GET /api/og?reg=JA819A — SNS カードの画像（1200×630 PNG）。
  *
- * Edge Function。`@vercel/og`（satori + resvg の wasm）は Edge Runtime 前提なので
- * ここでは **Node の API を使うモジュールを読み込まない**（lib/status.js は不可）。
- * lib/db.js は fetch だけで Supabase を読むので Edge でも動く。
- *
- * ローカルの test/dev-server.js は Edge Runtime を持たないため、このファイルは実行されず
- * 代わりにプレースホルダの SVG が返る（README「OG 画像」参照）。
+ * Node.js Serverless Function。`@vercel/og` 1.x は Node ランタイム用のビルド（dist/index.node.js）を持ち、
+ * Edge ビルドは `module` を import していて Vercel の Edge Runtime にデプロイできない（2026-09 時点）ため
+ * Node で動かす。ローカルの test/dev-server.js でもそのまま実行できる。
  */
 import { ImageResponse } from '@vercel/og';
 import { getLiveryPageData } from '../lib/db.js';
 import { buildOgElement, loadJpFonts, OG_WIDTH, OG_HEIGHT } from '../lib/og-render.js';
 
-export const config = { runtime: 'edge' };
-
-export default async function handler(req) {
-  const reg = (new URL(req.url).searchParams.get('reg') || '').trim().toUpperCase();
+export default async function handler(req, res) {
+  const reg = String((req.query && req.query.reg) || '').trim().toUpperCase();
 
   let data = null;
   try {
@@ -37,13 +32,14 @@ export default async function handler(req) {
   });
 
   const fonts = await loadJpFonts(text);
-  return new ImageResponse(element, {
+  const image = new ImageResponse(element, {
     width: OG_WIDTH,
     height: OG_HEIGHT,
     fonts: fonts.length ? fonts : undefined,
-    headers: {
-      // 画像は塗装が承認・差し替えられるまで変わらない。エッジで 1 時間持たせる
-      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-    },
   });
+  const png = Buffer.from(await image.arrayBuffer());
+  res.setHeader('Content-Type', 'image/png');
+  // 画像は塗装が承認・差し替えられるまで変わらない。エッジで 1 時間持たせる
+  res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+  res.status(200).send(png);
 }
