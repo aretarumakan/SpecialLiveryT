@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>特別塗装機の一覧 | 空港ウォッチ</title>
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  main { padding: 10px 12px; }
+  .tools { display: grid; gap: 8px; margin-bottom: 10px; }
+  .search { display: flex; gap: 6px; }
+  .search input { flex: 1; min-width: 0; font-size: 16px; padding: 9px 11px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  .search input::placeholder { color: #64748b; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips button { flex: 0 0 auto; padding: 6px 11px; font-size: 13px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+  .chips button.on { background: var(--accent); color: #082f49; border-color: var(--accent); font-weight: 700; }
+  .opts { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); }
+  .opts label { display: flex; align-items: center; gap: 6px; }
+  .opts input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+
+  .lcard { display: grid; grid-template-columns: 128px 1fr; gap: 4px 10px; background: var(--panel);
+    border: 1px solid var(--gold); border-radius: 14px; padding: 10px; margin-bottom: 10px;
+    box-shadow: 0 0 0 1px var(--gold) inset, 0 0 12px rgba(251,191,36,.18);
+    background-image: linear-gradient(135deg, #2b2a1e 0%, var(--panel) 60%); }
+  .lcard > .thumb { grid-row: 1 / span 4; }
+  .thumb { position: relative; display: block; width: 128px; height: 86px; border-radius: 10px; overflow: hidden;
+    background: #0b1220; border: 1px solid var(--gold); text-decoration: none; }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb .ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #475569; }
+  .thumb .cred { position: absolute; left: 0; right: 0; bottom: 0; font-size: 9px; line-height: 1.4; padding: 1px 4px;
+    background: rgba(0,0,0,.55); color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lcard .name { font-size: 15px; font-weight: 700; line-height: 1.35; }
+  .lcard .name a { color: var(--text); text-decoration: none; }
+  .lcard .name i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px;
+    vertical-align: middle; border: 1px solid rgba(255,255,255,.4); }
+  .lcard .reg { font-family: ui-monospace, Menlo, monospace; font-size: 17px; font-weight: 700; letter-spacing: .5px; }
+  .lcard .meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .lcard .note { grid-column: 1 / -1; font-size: 13px; padding: 6px 8px; border-radius: 8px;
+    background: rgba(251,191,36,.12); color: #fde68a; }
+  .lcard .act { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+  .count { font-size: 12px; color: var(--muted); margin: 0 2px 8px; }
+</style>
+</head>
+<body>
+<div id="aw-header"></div>
+<script src="/js/common.js" data-title="特別塗装機"></script>
+
+<main>
+  <div class="tools">
+    <div class="search">
+      <input id="q" type="search" inputmode="search" placeholder="登録記号・塗装名・機種で検索" autocomplete="off">
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="opts">
+      <label><input type="checkbox" id="activeOnly" checked> 運航中のみ</label>
+      <span id="count" class="count"></span>
+    </div>
+  </div>
+  <div id="error" class="err" hidden></div>
+  <div id="list"><div class="empty">読み込み中…</div></div>
+</main>
+
+<footer>
+  掲載されていない特別塗装機は <a href="/submit.html">投稿</a> から登録できます。写真は撮影者名付きで表示されます。<br>
+  写真の著作権は撮影者に帰属します。位置データ: <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>（ODbL）
+</footer>
+
+<script>
+  var ALL = [];          // 承認済み塗装の全件
+  var airline = '';      // 選んでいる航空会社（空 = すべて）
+  var qText = '';
+  var activeOnly = true;
+
+  var elList = document.getElementById('list');
+  var elChips = document.getElementById('chips');
+  var elCount = document.getElementById('count');
+  var elQ = document.getElementById('q');
+  var elActive = document.getElementById('activeOnly');
+  var elErr = document.getElementById('error');
+
+  function esc(s) { return window.AW ? AW.esc(s) : String(s == null ? '' : s); }
+
+  function load() {
+    // 全件を一度取って、絞り込みは手元で行う（件数が少なく、チップも全件から作りたい）
+    fetch('/api/liveries', { cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok || res.d.error) throw new Error(res.d.error || ('HTTP ' + res.status));
+        ALL = res.d.items || [];
+        elErr.hidden = true;
+        buildChips(res.d.airlines || []);
+        render();
+      })
+      .catch(function (e) {
+        elErr.textContent = '一覧の取得に失敗しました: ' + (e && e.message ? e.message : e);
+        elErr.hidden = false;
+        elList.innerHTML = '';
+      });
+  }
+
+  function buildChips(airlines) {
+    var html = '<button data-air="" class="on">すべて</button>';
+    airlines.forEach(function (a) {
+      html += '<button data-air="' + esc(a) + '">' + esc(a) + '</button>';
+    });
+    elChips.innerHTML = html;
+    Array.prototype.forEach.call(elChips.querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () {
+        airline = b.dataset.air || '';
+        Array.prototype.forEach.call(elChips.querySelectorAll('button'), function (x) { x.classList.remove('on'); });
+        b.classList.add('on');
+        render();
+      });
+    });
+  }
+
+  function visible() {
+    var needle = qText.trim().toLowerCase();
+    return ALL.filter(function (it) {
+      if (airline && it.airline !== airline) return false;
+      if (activeOnly && it.until) return false;
+      if (!needle) return true;
+      var hay = [it.reg, it.name, it.name_en, it.airline, it.type, it.note].join(' ').toLowerCase();
+      return hay.indexOf(needle) >= 0;
+    });
+  }
+
+  function render() {
+    var items = visible();
+    elCount.textContent = items.length + ' 件 / 全 ' + ALL.length + ' 件';
+    if (!items.length) {
+      elList.innerHTML = '<div class="empty">条件に合う特別塗装機はありません。<br>'
+        + '<a href="/submit.html">新しい塗装を登録する</a></div>';
+      return;
+    }
+    elList.innerHTML = items.map(card).join('');
+  }
+
+  function period(it) {
+    if (!it.since && !it.until) return '運航中';
+    var s = it.since ? String(it.since).replace(/-/g, '/') : '?';
+    return it.until ? s + ' 〜 ' + String(it.until).replace(/-/g, '/') + '（運航終了）' : s + ' 〜 運航中';
+  }
+
+  function thumb(it) {
+    var href = '/livery/' + encodeURIComponent(it.reg);
+    if (!it.thumbUrl) {
+      return '<a class="thumb" href="' + href + '"><span class="ph">✈</span></a>';
+    }
+    return '<a class="thumb" href="' + href + '">'
+      + '<img src="' + esc(it.thumbUrl) + '" alt="' + esc(it.name) + '" loading="lazy">'
+      + (it.credit ? '<span class="cred">© ' + esc(it.credit) + '</span>' : '')
+      + '</a>';
+  }
+
+  function card(it) {
+    var href = '/livery/' + encodeURIComponent(it.reg);
+    var meta = [it.airline, it.type].filter(Boolean).map(esc).join('・');
+    var act = it.thumbUrl
+      ? '<a class="aw-btn" href="' + href + '">この塗装のページ</a>'
+        + '<a class="aw-btn" href="/submit.html?reg=' + encodeURIComponent(it.reg) + '">写真を追加</a>'
+      : '<a class="aw-btn gold" href="/submit.html?reg=' + encodeURIComponent(it.reg) + '">あなたの写真を載せませんか</a>';
+
+    return '<article class="lcard">'
+      + thumb(it)
+      + '<div class="name"><a href="' + href + '">'
+        + (it.color ? '<i style="background:' + esc(it.color) + '"></i>' : '')
+        + esc(it.name) + '</a>'
+        + (it.until ? '<span class="badge">運航終了</span>' : '') + '</div>'
+      + '<div class="reg">' + esc(it.reg) + '</div>'
+      + '<div class="meta">' + meta + '</div>'
+      + '<div class="meta">' + esc(period(it)) + (it.credit ? '　写真: ' + esc(it.credit) : '') + '</div>'
+      + (it.note ? '<div class="note">' + esc(it.note) + '</div>' : '')
+      + '<div class="act">' + act + '</div>'
+      + '</article>';
+  }
+
+  var qTimer = null;
+  elQ.addEventListener('input', function () {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(function () { qText = elQ.value || ''; render(); }, 150);
+  });
+  elActive.addEventListener('change', function () { activeOnly = elActive.checked; render(); });
+
+  // URL の ?reg= / ?q= で初期検索できるようにする（投稿ページからの戻り導線）
+  (function () {
+    var p = new URLSearchParams(location.search);
+    var q0 = p.get('q') || p.get('reg') || '';
+    if (q0) { elQ.value = q0; qText = q0; }
+    if (p.get('active') === '0') { elActive.checked = false; activeOnly = false; }
+  })();
+
+  load();
+</script>
+</body>
+</html>

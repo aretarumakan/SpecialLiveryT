@@ -1,0 +1,53 @@
+/* =============================================================================
+   空港ウォッチ 共通スタイル（デザイントークン + 土台）
+   index.html から共通部分だけを切り出したもの。各ページ固有のレイアウトは
+   そのページの <style> に置く。
+   ============================================================================= */
+
+:root {
+  --bg: #0f172a; --panel: #1e293b; --panel2: #273449; --text: #e2e8f0; --muted: #94a3b8;
+  --accent: #38bdf8; --gold: #fbbf24; --green: #4ade80; --red: #f87171; --line: #334155;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 15px; }
+body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+a { color: var(--accent); }
+h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 2px 6px; }
+
+.empty { text-align: center; color: var(--muted); padding: 40px 10px; }
+.err { background: #450a0a; color: #fecaca; padding: 10px 12px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; }
+footer { font-size: 11px; color: var(--muted); padding: 16px 12px; text-align: center; line-height: 1.6; }
+
+.badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--panel2); color: var(--muted); margin-left: 6px; vertical-align: middle; }
+.badge.gold { background: var(--gold); color: #3b2f00; font-weight: 700; }
+.badge.green { background: #14532d; color: var(--green); }
+.badge.blue { background: #0c4a6e; color: var(--accent); }
+.badge.guess { border: 1px dashed var(--muted); background: transparent; }
+
+/* -----------------------------------------------------------------------------
+   共通ヘッダ・ナビ（public/js/common.js が挿入する）
+   ----------------------------------------------------------------------------- */
+.aw-head { position: sticky; top: 0; z-index: 20; background: rgba(15,23,42,.96); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line); padding: calc(8px + env(safe-area-inset-top)) 12px 0; }
+.aw-head .aw-top { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.aw-head .aw-title { font-size: 17px; font-weight: 700; margin: 0; white-space: nowrap; }
+.aw-head .aw-title a { color: var(--text); text-decoration: none; }
+.aw-head .aw-user { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.aw-nav { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; scrollbar-width: none; }
+.aw-nav::-webkit-scrollbar { display: none; }
+.aw-nav a { flex: 0 0 auto; padding: 7px 12px; font-size: 13px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--muted); text-decoration: none; }
+.aw-nav a.on { background: var(--accent); color: #082f49; border-color: var(--accent); font-weight: 700; }
+
+/* トースト */
+.aw-toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  z-index: 100; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
+.aw-toast > div { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 14px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.4); max-width: 90vw; }
+
+/* ボタン */
+.aw-btn { display: inline-block; padding: 8px 12px; font-size: 13px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel2); color: var(--text); text-decoration: none; cursor: pointer; }
+.aw-btn.primary { background: var(--accent); color: #082f49; border-color: var(--accent); font-weight: 700; }
+.aw-btn.gold { background: var(--gold); color: #3b2f00; border-color: var(--gold); font-weight: 700; }

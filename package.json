@@ -6,7 +6,10 @@
   "type": "module",
   "engines": { "node": ">=20" },
   "scripts": {
-    "test": "node test/run.js",
-    "dev": "vercel dev"
+    "test": "node --test test/",
+    "test:live": "node test/run.js",
+    "dev": "MOCK_DB=1 node test/dev-server.js",
+    "dev:supabase": "node test/dev-server.js",
+    "dev:vercel": "vercel dev"
   }
 }

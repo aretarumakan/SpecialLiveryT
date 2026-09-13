@@ -7,15 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>空港ウォッチ</title>
+<link rel="stylesheet" href="/css/app.css">
 <style>
-  :root {
-    --bg: #0f172a; --panel: #1e293b; --panel2: #273449; --text: #e2e8f0; --muted: #94a3b8;
-    --accent: #38bdf8; --gold: #fbbf24; --green: #4ade80; --red: #f87171; --line: #334155;
-  }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; font-size: 15px; }
-  body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  /* 共通のデザイントークン・土台は /css/app.css。ここはこの画面固有のレイアウトだけ。 */
   header { position: sticky; top: 0; z-index: 10; background: rgba(15,23,42,.96); backdrop-filter: blur(6px);
     border-bottom: 1px solid var(--line); padding: calc(8px + env(safe-area-inset-top)) 12px 8px; }
   .row { display: flex; align-items: center; gap: 8px; }
@@ -33,7 +27,6 @@
   nav.tabs button b { font-weight: 700; }
   main { padding: 10px 12px; }
   section { display: none; } section.on { display: block; }
-  .empty { text-align: center; color: var(--muted); padding: 40px 10px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; display: grid;
     grid-template-columns: 1fr 112px; gap: 2px 10px; position: relative; }
   .card > div { min-width: 0; }
@@ -57,18 +50,10 @@
   .card.special .photo { border-color: var(--gold); }
   .card .route { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
   .card .route b { color: var(--text); }
-  .badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--panel2); color: var(--muted); margin-left: 6px; vertical-align: middle; }
-  .badge.gold { background: var(--gold); color: #3b2f00; font-weight: 700; }
-  .badge.green { background: #14532d; color: var(--green); } .badge.blue { background: #0c4a6e; color: var(--accent); }
-  .badge.guess { border: 1px dashed var(--muted); background: transparent; }
   .special-note { grid-column: 1 / -1; font-size: 13px; margin-top: 4px; padding: 6px 8px; border-radius: 8px; background: rgba(251,191,36,.12); color: #fde68a; }
   .special-note i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; border: 1px solid rgba(255,255,255,.4); }
-  h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 2px 6px; }
-  footer { font-size: 11px; color: var(--muted); padding: 16px 12px; text-align: center; line-height: 1.6; }
-  .err { background: #450a0a; color: #fecaca; padding: 10px 12px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 10px; font-size: 11px; color: var(--muted); padding: 0 12px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-  a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -99,6 +84,7 @@
 </main>
 
 <footer>
+  <a href="/liveries.html">★ 特別塗装機の一覧を見る</a><br>
   30秒ごとに自動更新。位置データ: <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>（ADS-B）／経路: <a href="https://www.adsbdb.com" target="_blank" rel="noopener">adsbdb</a><br>
   機体写真: <a href="https://www.planespotters.net" target="_blank" rel="noopener">Planespotters.net</a>（写真をタップすると撮影者のページが開きます）<br>
   受信状況により表示されない機体もあります。到着予定の「推定」は飛行経路からの推測です。
