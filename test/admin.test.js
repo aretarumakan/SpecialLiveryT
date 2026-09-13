@@ -17,13 +17,13 @@ const db = await import('../lib/db.js');
 const auth = await import('../lib/auth.js');
 const adminLib = await import('../lib/admin.js');
 
-const pending = (await import('../api/admin/pending.js')).default;
-const approve = (await import('../api/admin/approve.js')).default;
-const primary = (await import('../api/admin/primary.js')).default;
-const reports = (await import('../api/admin/reports.js')).default;
-const hexFill = (await import('../api/admin/hex-fill.js')).default;
-const sweep = (await import('../api/admin/sweep.js')).default;
-const creditBackfill = (await import('../api/admin/credit-backfill.js')).default;
+const pending = (await import('../lib/admin-api/pending.js')).default;
+const approve = (await import('../lib/admin-api/approve.js')).default;
+const primary = (await import('../lib/admin-api/primary.js')).default;
+const reports = (await import('../lib/admin-api/reports.js')).default;
+const hexFill = (await import('../lib/admin-api/hex-fill.js')).default;
+const sweep = (await import('../lib/admin-api/sweep.js')).default;
+const creditBackfill = (await import('../lib/admin-api/credit-backfill.js')).default;
 const report = (await import('../api/report.js')).default;
 
 // ---------------------------------------------------------------------------

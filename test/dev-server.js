@@ -186,7 +186,11 @@ export async function createServer() {
 
       const apiMatch = pathname.match(/^\/api\/([A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)\/?$/);
       if (apiMatch) {
-        const file = routes.get(apiMatch[1]);
+        let file = routes.get(apiMatch[1]);
+        let adminOp = null;
+        // vercel.json の rewrite（/api/admin/:op → /api/admin?op=:op）を再現する
+        const adminMatch = !file && apiMatch[1].match(/^admin\/([A-Za-z0-9_-]+)$/);
+        if (adminMatch && routes.has('admin')) { file = routes.get('admin'); adminOp = adminMatch[1]; }
         if (!file) { res.status(404).json({ error: `/api/${apiMatch[1]} はありません` }); return; }
         if (await isEdgeFunction(file)) {
           res.statusCode = 200;
@@ -196,6 +200,7 @@ export async function createServer() {
           return;
         }
         await shimReq(req, url);
+        if (adminOp) req.query.op = adminOp;
         const fn = await loadHandler(file);
         await fn(req, res);
         if (!res.writableEnded) res.end();

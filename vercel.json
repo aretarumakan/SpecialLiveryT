@@ -1,8 +1,23 @@
 {
   "rewrites": [
-    { "source": "/livery/:reg", "destination": "/api/livery-page?reg=:reg" }
+    {
+      "source": "/api/admin/:op",
+      "destination": "/api/admin?op=:op"
+    },
+    {
+      "source": "/livery/:reg",
+      "destination": "/api/livery-page?reg=:reg"
+    }
   ],
   "headers": [
-    { "source": "/api/(.*)", "headers": [ { "key": "Access-Control-Allow-Origin", "value": "*" } ] }
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    }
   ]
 }
